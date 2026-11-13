@@ -26,10 +26,11 @@ def main_menu():
     keyboard.button(text="👤 Профиль", callback_data="vortex:profile")
     keyboard.button(text="⭐ Репутация", callback_data="vortex:reputation")
     keyboard.button(text="💰 Экономика", callback_data="vortex:economy")
+    keyboard.button(text="🛒 Предметы и рынок", callback_data="vortex:shop")
     keyboard.button(text="🎮 Игры", callback_data="vortex:games")
     keyboard.button(text="👋 Приветствие", callback_data="vortex:welcome")
     keyboard.button(text="📖 Все команды", callback_data="vortex:commands")
-    keyboard.adjust(2, 2, 2, 2, 2, 1)
+    keyboard.adjust(2, 2, 2, 2, 2, 2)
     return keyboard.as_markup()
 
 
@@ -39,6 +40,16 @@ def games_menu():
     keyboard.button(text="✊ Камень, ножницы, бумага", callback_data="game:start:rps")
     keyboard.button(text="🧠 Викторина", callback_data="game:start:quiz")
     keyboard.button(text="🏆 Рейтинг игр", callback_data="game:top")
+    keyboard.button(text="⬅️ В главное меню", callback_data="vortex:home")
+    keyboard.adjust(1)
+    return keyboard.as_markup()
+
+
+def shop_menu():
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="🛍 Каталог магазина", callback_data="vortex:shop_catalog")
+    keyboard.button(text="🎒 Мой инвентарь", callback_data="vortex:shop_inventory")
+    keyboard.button(text="🏪 Рынок игроков", callback_data="vortex:shop_market")
     keyboard.button(text="⬅️ В главное меню", callback_data="vortex:home")
     keyboard.adjust(1)
     return keyboard.as_markup()
@@ -109,12 +120,13 @@ MENU_TEXT = {
         "/daily — получить ежедневные 100 V-coins\n"
         "Ответь командой /pay 50 на сообщение участника, чтобы перевести ему 50 монет.\n"
         "/topmoney — рейтинг богачей группы\n"
-        "/exchange 100 — обменять игровые очки на V-coins (10:1)"
+        "/exchange 100 — обменять 100 игровых очков на 10 V-coins. Курс 10:1.\n\n"
+        "Покупка, подарки и торговля предметами — в разделе «Предметы и рынок»."
     ),
     "games": (
         "🎮 <b>Игровой зал VORTEX</b>\n\n"
         "Играй прямо в группе, зарабатывай игровые очки и поднимайся в рейтинге.\n"
-        "🔢 Угадай число — найди число от 1 до 100 за 7 попыток (+10 очков).\n"
+        "🔢 Угадай число — найди число от 1 до 100 за 6 попыток (+10 очков).\n"
         "✊ Камень, ножницы, бумага — сыграй против бота (до +5 очков).\n"
         "🧠 Викторина — отвечай на вопросы (+3 очка за правильный ответ).\n\n"
         "Игровые очки отдельны от V-coins. Команда /topgames покажет рейтинг.\n"
@@ -126,28 +138,29 @@ MENU_TEXT = {
     ),
     "commands": (
         "📖 <b>Список команд</b>\n\n"
-        "/help — открыть справку\n"
+        "<b>Модерация:</b>\n"
         "/warn — предупреждение (ответом)\n"
         "/warnings — число предупреждений (ответом)\n"
         "/clearwarns — очистить предупреждения (ответом)\n"
-        "/mute 10m — ограничить пользователя (ответом)\n"
-        "/unmute — снять ограничение (ответом)\n"
-        "/kick — удалить из группы (ответом)\n"
-        "/ban — заблокировать (ответом)\n"
+        "/mute 10m, /unmute, /kick, /ban — действия (ответом)\n"
         "/unban ID — разблокировать по Telegram ID\n"
-        "/profile — профиль участника\n"
-        "/rep — выдать репутацию (ответом)\n"
-        "/toprep — топ репутации\n"
-        "/topactivity — топ активности\n"
-        "/balance — баланс\n"
-        "/daily — ежедневная награда\n"
-        "/pay — перевод монет (ответом)\n"
-        "/topmoney — топ богачей\n"
-        "/games — игровой зал\n"
-        "/guessgame — начать Угадай число\n"
-        "/guess 50 — сделать ход\n"
-        "/topgames — рейтинг игр\n"
-        "/stats — статистика группы"
+        "/stats — статистика группы\n\n"
+        "<b>Профиль и репутация:</b>\n"
+        "/profile, /rep (ответом), /toprep, /topactivity\n\n"
+        "<b>Экономика:</b>\n"
+        "/balance, /daily, /pay 50 (ответом), /topmoney\n"
+        "/exchange 100 — обмен игровых очков на V-coins\n\n"
+        "<b>Игры:</b>\n"
+        "/games, /guessgame, /guess 50, /topgames\n\n"
+        "<b>Предметы и рынок:</b>\n"
+        "/shop — каталог\n"
+        "/buyitem rose 2 — купить предмет\n"
+        "/inventory — инвентарь\n"
+        "/useitem lucky_charm — использовать расходник\n"
+        "/giftitem rose 1 — подарить (ответом на сообщение)\n"
+        "/sellitem rose 1 150 — выставить на рынок\n"
+        "/market — объявления игроков\n"
+        "/buylisting 12 — купить лот"
     ),
 }
 
@@ -316,7 +329,7 @@ async def member_action_callback(
 
 
 @router.callback_query(lambda query: query.data and query.data.startswith("vortex:"))
-async def menu_callback(query: CallbackQuery):
+async def menu_callback(query: CallbackQuery, db: Database):
     section = query.data.split(":", 1)[1]
     if not query.message:
         await query.answer()
@@ -330,6 +343,43 @@ async def menu_callback(query: CallbackQuery):
         await query.message.edit_text(text, reply_markup=main_menu())
     elif section == "games":
         await query.message.edit_text(MENU_TEXT[section], reply_markup=games_menu())
+    elif section == "shop":
+        await query.message.edit_text(
+            "🛒 <b>Предметы и рынок VORTEX</b>\n\n"
+            "Покупай предметы за V-coins, храни их в инвентаре, используй расходники, "
+            "дарить предметы другим участникам или выставляй их на рынок.",
+            reply_markup=shop_menu(),
+        )
+    elif section == "shop_catalog":
+        await query.message.edit_text(
+            "🛍 <b>Каталог магазина</b>\n\n"
+            "🌹 Роза — 100 V-coins\n"
+            "🍫 Шоколад — 250 V-coins\n"
+            "🏆 Кубок — 1 000 V-coins\n"
+            "👑 Корона — 2 500 V-coins\n"
+            "🍀 Талисман удачи — 400 V-coins (+5 игровых очков при использовании)\n\n"
+            "Купить: <code>/buyitem rose 2</code>\n"
+            "После покупки предмет появится в твоём инвентаре.",
+            reply_markup=shop_menu(),
+        )
+    elif section == "shop_inventory":
+        await query.message.edit_text(
+            "🎒 <b>Инвентарь</b>\n\n"
+            "Команда /inventory покажет твои предметы.\n\n"
+            "Использовать расходник: /useitem lucky_charm\n"
+            "Подарить предмет: ответь на сообщение участника командой /giftitem rose 1\n"
+            "Выставить на рынок: /sellitem rose 1 150",
+            reply_markup=shop_menu(),
+        )
+    elif section == "shop_market":
+        await query.message.edit_text(
+            "🏪 <b>Рынок игроков</b>\n\n"
+            "/market — посмотреть объявления\n"
+            "/sellitem rose 1 150 — выставить предмет (цена за штуку)\n"
+            "/buylisting 12 — купить лот целиком\n\n"
+            "С продавца удерживается комиссия 5%. Предметы резервируются до продажи.",
+            reply_markup=shop_menu(),
+        )
     elif section in MENU_TEXT:
         await query.message.edit_text(MENU_TEXT[section], reply_markup=back_menu())
     await query.answer()
