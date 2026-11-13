@@ -191,7 +191,7 @@ async def private_profile_command(message: Message, db: Database):
         await message.answer("Пока нет данных профиля. Напиши несколько сообщений в группе, где работает VORTEX.")
 
 
-@router.message(lambda m: m.chat.type == "private" and m.text and m.text.startswith("/") and not m.text.split()[0].startswith(("/start", "/profile", "/cancel")))
+@router.message(lambda m: m.chat.type == "private" and m.text and m.text.startswith("/") and m.text.split(maxsplit=1)[0].split("@", 1)[0] not in {"/start", "/profile", "/cancel"})
 async def block_private_commands(message: Message):
     await message.answer("В личном чате доступны просмотр своего профиля и личный кабинет. Команды управления группой работают только при наличии прав администратора в самой группе.")
 
