@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from html import escape
 
 import aiosqlite
+import re
 from aiogram import Bot, Router
 from aiogram.enums import ChatMemberStatus
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
@@ -33,6 +34,20 @@ async def _safe_query_answer(query: CallbackQuery, *args, **kwargs) -> None:
 pending_action: dict[int, tuple[int, str]] = {}
 pending_filter_input: dict[int, int] = {}
 pending_rank_target: dict[int, int] = {}
+
+
+async def _resolve_group_username(db: Database, chat_id: int, username: str) -> int | None:
+    """Resolve a previously observed group username to its Telegram user ID."""
+    value = username.strip().removeprefix("@").casefold()
+    if not re.fullmatch(r"[a-z0-9_]{5,32}", value):
+        return None
+    async with aiosqlite.connect(db.path) as conn:
+        cur = await conn.execute(
+            "SELECT user_id FROM users WHERE chat_id=? AND lower(username)=? ORDER BY last_seen DESC LIMIT 2",
+            (chat_id, value),
+        )
+        rows = await cur.fetchall()
+    return int(rows[0][0]) if len(rows) == 1 else None
 
 
 async def allowed(bot: Bot, user_id: int, chat_id: int, owner_ids: frozenset[int]) -> bool:
@@ -350,7 +365,7 @@ async def moderation_menu(query: CallbackQuery, bot: Bot, owner_ids: frozenset[i
         return
     await _safe_edit(query.message, 
         "🛡 <b>Модерация из личного чата</b>\n\n"
-        "Выбери действие, затем отправь Telegram ID участника одним сообщением. "
+        "Выбери действие, затем отправь @username участника одним сообщением. "
         "Для отмены отправь /cancel.",
         reply_markup=moderation_keyboard(chat_id),
     )
@@ -381,7 +396,7 @@ async def choose_action(query: CallbackQuery, bot: Bot, owner_ids: frozenset[int
         return
     pending_action[query.from_user.id] = (chat_id, action)
     await query.message.answer(
-        f"Отправь Telegram ID участника для действия «{action}».\n"
+        f"Отправь @username участника для действия «{action}».\n"
         "Отмена: /cancel"
     )
     await _safe_query_answer(query,)
@@ -409,12 +424,12 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
         await message.answer("Доступ отозван. Операция отменена.")
         return
     raw = (message.text or "").strip()
-    if not raw.isdigit():
-        await message.answer("Нужен числовой Telegram ID. Для отмены /cancel.")
+    if not raw.startswith("@"):
+        await message.answer("Укажи username в формате @username. Для отмены /cancel.")
         return
-    user_id = int(raw)
-    if user_id <= 0:
-        await message.answer("Укажи корректный положительный Telegram ID.")
+    user_id = await _resolve_group_username(db, chat_id, raw)
+    if user_id is None:
+        await message.answer("Не нашёл однозначного участника с таким username. Он должен быть известен боту в этой группе; проверь написание @username.")
         return
     if user_id == message.from_user.id:
         await message.answer("Нельзя применить действие к самому себе.")
@@ -772,7 +787,7 @@ async def begin_rank_assignment(query: CallbackQuery, bot: Bot, db: Database, ow
         await _safe_query_answer(query, "Недостаточно прав.", show_alert=True)
         return
     pending_rank_target[query.from_user.id] = chat_id
-    await query.message.answer("Отправь Telegram ID участника группы, которому нужно назначить или изменить ранг. Отмена: /cancel")
+    await query.message.answer("Отправь @username участника группы, которому нужно назначить или изменить ранг. Отмена: /cancel")
     await _safe_query_answer(query)
 
 
@@ -789,12 +804,12 @@ async def receive_rank_target(message: Message, bot: Bot, db: Database, owner_id
         await message.answer("Доступ отозван. Операция отменена.")
         return
     raw = (message.text or "").strip()
-    if not raw.isdigit():
-        await message.answer("Нужен числовой Telegram ID. Попробуй ещё раз или /cancel.")
+    if not raw.startswith("@"):
+        await message.answer("Укажи username в формате @username. Попробуй ещё раз или /cancel.")
         return
-    target_id = int(raw)
-    if target_id <= 0:
-        await message.answer("Некорректный ID.")
+    target_id = await _resolve_group_username(db, chat_id, raw)
+    if target_id is None:
+        await message.answer("Не нашёл однозначного участника с таким username. Участник должен быть известен боту в этой группе; проверь @username.")
         return
     try:
         member = await bot.get_chat_member(chat_id, target_id)
