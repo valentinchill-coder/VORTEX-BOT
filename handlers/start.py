@@ -126,7 +126,7 @@ async def help_command(message: Message):
     )
 
 
-@router.message(lambda message: message.chat.type != "private" and message.reply_to_message is not None)
+@router.message(lambda message: message.chat.type != "private" and message.reply_to_message is not None and message.from_user is not None and (message.chat.id, message.from_user.id) in pending_selection)
 async def receive_selected_member(message: Message, bot: Bot, owner_ids: frozenset[int]):
     if not message.from_user:
         return
