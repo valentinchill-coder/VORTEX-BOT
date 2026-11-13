@@ -5,7 +5,7 @@ from aiogram.enums import ChatType
 from aiogram.types import Message
 
 from database.db import Database
-from handlers import economy, games, moderation, profile, shop, start, private_panel
+from handlers import economy, games, moderation, profile, shop, start, private_panel, ranks
 
 router = Router()
 
