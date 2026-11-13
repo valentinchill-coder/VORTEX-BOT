@@ -5,7 +5,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import ChatMemberUpdated
+from aiogram.types import ChatMemberUpdated, BotCommand
 from aiogram.filters import ChatMemberUpdatedFilter, JOIN_TRANSITION
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
@@ -104,6 +104,19 @@ async def main():
 
     try:
         me = await bot.get_me()
+        await bot.set_my_commands([
+            BotCommand(command="start", description="Открыть главное меню"),
+            BotCommand(command="help", description="Помощь и список команд"),
+            BotCommand(command="warn", description="Выдать предупреждение (ответом)"),
+            BotCommand(command="warnings", description="Посмотреть предупреждения (ответом)"),
+            BotCommand(command="clearwarns", description="Очистить предупреждения (ответом)"),
+            BotCommand(command="mute", description="Ограничить пользователя (ответом)"),
+            BotCommand(command="unmute", description="Снять ограничение (ответом)"),
+            BotCommand(command="kick", description="Исключить пользователя (ответом)"),
+            BotCommand(command="ban", description="Заблокировать пользователя (ответом)"),
+            BotCommand(command="unban", description="Разблокировать по ID"),
+            BotCommand(command="stats", description="Статистика группы"),
+        ])
         logging.info("VORTEX BOT starting as @%s in %s mode", me.username, settings.mode)
 
         if settings.mode == "webhook":
