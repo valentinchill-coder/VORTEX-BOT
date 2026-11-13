@@ -35,10 +35,6 @@ class AntiFloodActivityTests(unittest.IsolatedAsyncioTestCase):
         delete.assert_awaited_once()
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class BlockedWordMatchingTests(unittest.TestCase):
     def test_blocked_word_matching_uses_word_boundaries(self):
         self.assertTrue(contains_blocked_word("This is BAD phrase!", ["bad phrase"]))
@@ -46,3 +42,5 @@ class BlockedWordMatchingTests(unittest.TestCase):
         self.assertFalse(contains_blocked_word("class assignment", ["ass"]))
         self.assertFalse(contains_blocked_word("badly phrased", ["bad phrase"]))
 
+if __name__ == "__main__":
+    unittest.main()
