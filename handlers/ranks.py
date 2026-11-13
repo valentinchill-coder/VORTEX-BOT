@@ -68,14 +68,14 @@ async def handle_natural_rank(message: Message, db: Database, bot: Bot,
     if intent == "__myrank__":
         rank = await get_rank(db, bot, message.chat.id, message.from_user.id, owner_ids)
         name, description = RANKS[rank]
-        await message.answer(f"Твой ранг: <b>{name}</b> ({rank}/7)\\n{description}")
+        await message.answer(f"Твой ранг: <b>{name}</b> ({rank}/7)\n{description}")
         return
     if intent == "__ranks__":
         lines = ["🛡 <b>Иерархия модерации VORTEX</b>"]
         for number, (name, description) in RANKS.items():
             lines.append(f"<b>{number}. {name}</b> — {description}")
-        lines.append("\\nРанг 6 автоматически получают администраторы Telegram. Ранг 7 — владелец бота.")
-        await message.answer("\\n".join(lines))
+        lines.append("\nРанг 6 автоматически получают администраторы Telegram. Ранг 7 — владелец бота.")
+        await message.answer("\n".join(lines))
         return
 
     actor_rank = await get_rank(db, bot, message.chat.id, message.from_user.id, owner_ids)
