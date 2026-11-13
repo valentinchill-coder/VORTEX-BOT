@@ -62,6 +62,16 @@ class Database:
                 )
             """)
             await db.execute("""
+                CREATE TABLE IF NOT EXISTS moderation_ranks (
+                    chat_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    rank INTEGER NOT NULL CHECK(rank BETWEEN 1 AND 5),
+                    assigned_by INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (chat_id, user_id)
+                )
+            """)
+            await db.execute("""
                 CREATE TABLE IF NOT EXISTS game_stats (
                     chat_id INTEGER NOT NULL,
                     user_id INTEGER NOT NULL,
@@ -375,3 +385,36 @@ class Database:
                 (int(row[0]), int(row[1]), int(row[2]), int(row[3]))
                 for row in await cursor.fetchall()
             ]
+
+
+    async def get_moderation_rank(self, chat_id: int, user_id: int) -> int:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                "SELECT rank FROM moderation_ranks WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            row = await cursor.fetchone()
+            return int(row[0]) if row else 0
+
+    async def set_moderation_rank(
+        self, chat_id: int, user_id: int, rank: int, assigned_by: int
+    ) -> None:
+        if rank == 0:
+            async with aiosqlite.connect(self.path) as db:
+                await db.execute(
+                    "DELETE FROM moderation_ranks WHERE chat_id=? AND user_id=?",
+                    (chat_id, user_id),
+                )
+                await db.commit()
+            return
+        if not 1 <= rank <= 5:
+            raise ValueError("Moderation rank must be between 1 and 5.")
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("""
+                INSERT INTO moderation_ranks(chat_id,user_id,rank,assigned_by,updated_at)
+                VALUES(?,?,?,?,?)
+                ON CONFLICT(chat_id,user_id) DO UPDATE SET
+                    rank=excluded.rank, assigned_by=excluded.assigned_by,
+                    updated_at=excluded.updated_at
+            """, (chat_id, user_id, rank, assigned_by, _now()))
+            await db.commit()
