@@ -556,12 +556,12 @@ async def group_audit_log(query: CallbackQuery, bot: Bot, db: Database, owner_id
         details = escape(str(row.get("details", "")))
         stamp = escape(str(row.get("created_at", ""))[:16].replace("T", " "))
         target = f" → <code>{int(row.get('target_id', 0))}</code>" if int(row.get("target_id", 0)) else ""
-        lines.append(f"• <b>{action}</b>{target}\\n  <code>{stamp}</code> {details}")
+        lines.append(f"• <b>{action}</b>{target}\n  <code>{stamp}</code> {details}")
     if not rows:
         lines.append("Журнал пока пуст.")
     kb = InlineKeyboardBuilder()
     kb.button(text="🔄 Обновить", callback_data=f"vp:audit:{chat_id}")
     kb.button(text="⬅️ Назад", callback_data=f"vp:group:{chat_id}")
     kb.adjust(1)
-    await _safe_edit(query.message, "\\n".join(lines), reply_markup=kb.as_markup())
+    await _safe_edit(query.message, "\n".join(lines), reply_markup=kb.as_markup())
     await _safe_query_answer(query)
