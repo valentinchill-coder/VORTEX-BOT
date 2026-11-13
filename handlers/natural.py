@@ -135,6 +135,8 @@ def parse_intent(text: str) -> str | None:
         return "/audit"
 
     # Moderation. These actions still go through the existing admin permission checks.
+    if re.search(r"\b(сними|снять|убери|убрать|отмени|отменить)\s+(?:мне\s+)?(?:варн\w*|предупреждени\w*)\b", value):
+        return "/clearwarns"
     if re.search(r"\b(варн|warn|выдай варн|выдай предупреждение|предупреди участника|предупреди|предупреждение пользователю)\b", value):
         reason = re.sub(r"^.*?(?:варн|warn|выдай предупреждение|предупреди участника|предупреди|предупреждение пользователю)\s*", "", raw, flags=re.I).strip()
         return "/warn" + (f" {reason}" if reason else "")
