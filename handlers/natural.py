@@ -42,7 +42,7 @@ def parse_intent(text: str) -> str | None:
     # Moderation ranks: natural-language aliases.
     if re.search(r"\b(мой ранг|какой у меня ранг|покажи мой ранг)\b", value):
         return "__myrank__"
-    if re.search(r"\b(покажи ранги|список рангов|иерархия рангов)\b", value):
+    if re.search(r"\b(покажи ранги|список рангов|иерархия рангов|какие ранги есть|какие есть ранги|какие у нас ранги|перечисли ранги)\b", value):
         return "__ranks__"
     if re.search(r"\b(снять ранг|сними ранг|обнули ранг|убери ранг|сбрось ранг)\b", value):
         return "__rank_remove__"
