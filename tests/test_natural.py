@@ -46,6 +46,14 @@ class NaturalLanguageIntentTests(unittest.TestCase):
     def test_moderation_audit_request_is_recognized(self):
         self.assertEqual(parse_intent("Покажи журнал модерации"), "/audit")
 
+    def test_short_moderation_aliases_are_recognized(self):
+        self.assertEqual(parse_intent("Бан"), "/ban")
+        self.assertEqual(parse_intent("Замуть"), "/mute 10m")
+        self.assertEqual(parse_intent("Мут на 15 минут"), "/mute 15m")
+        self.assertEqual(parse_intent("Мут на 2 часа"), "/mute 2h")
+        self.assertEqual(parse_intent("Кик"), "/kick")
+        self.assertEqual(parse_intent("Размут"), "/unmute")
+
     def test_group_statistics_request_is_recognized(self):
         self.assertEqual(parse_intent("Покажи статистику группы"), "/stats")
 
