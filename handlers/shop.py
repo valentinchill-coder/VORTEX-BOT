@@ -353,3 +353,178 @@ async def buy_listing_command(message: Message, db: Database):
         f"✅ Покупка завершена: {ITEMS[code]['name']} ×{quantity}.\n"
         f"Списано: {total} V-coins. Продавец получил {seller_credit} (комиссия 5%)."
     )
+
+
+# Button-driven shop UI. Users can browse, buy, use and purchase market listings
+# without typing bot commands.
+from aiogram.types import CallbackQuery
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+def _shop_home_keyboard():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🛍 Каталог", callback_data="shopui:catalog")
+    kb.button(text="🎒 Инвентарь", callback_data="shopui:inventory")
+    kb.button(text="🏪 Рынок", callback_data="shopui:market")
+    kb.button(text="⬅️ Главное меню", callback_data="vortex:home")
+    kb.adjust(1)
+    return kb.as_markup()
+
+def _catalog_keyboard():
+    kb = InlineKeyboardBuilder()
+    for code, item in ITEMS.items():
+        kb.button(text=f"Купить {item['name']} · {item['price']} 🪙", callback_data=f"shopui:buy:{code}")
+    kb.button(text="🎒 Мой инвентарь", callback_data="shopui:inventory")
+    kb.button(text="⬅️ Назад", callback_data="shopui:home")
+    kb.adjust(1)
+    return kb.as_markup()
+
+async def _render_inventory(message, db, user_id):
+    async with aiosqlite.connect(db.path) as conn:
+        cur = await conn.execute(
+            "SELECT item_code,quantity FROM user_items WHERE chat_id=? AND user_id=? AND quantity>0 ORDER BY item_code",
+            (message.chat.id, user_id),
+        )
+        rows = await cur.fetchall()
+    kb = InlineKeyboardBuilder()
+    lines = ["🎒 <b>Твой инвентарь</b>", ""]
+    if not rows:
+        lines.append("Пока пусто. Загляни в каталог!")
+    for code, qty in rows:
+        item = ITEMS.get(code)
+        if not item:
+            continue
+        lines.append(f"{item['name']} × <b>{qty}</b>")
+        if item["kind"] == "consumable":
+            kb.button(text=f"🍀 Использовать {item['name']}", callback_data=f"shopui:use:{code}")
+    kb.button(text="🛍 Каталог", callback_data="shopui:catalog")
+    kb.button(text="🏪 Рынок", callback_data="shopui:market")
+    kb.button(text="⬅️ Назад", callback_data="shopui:home")
+    kb.adjust(1)
+    await message.answer("\\n".join(lines), reply_markup=kb.as_markup())
+
+@router.callback_query(lambda q: q.data and q.data.startswith("shopui:"))
+async def shop_ui_callback(query: CallbackQuery, db: Database):
+    if not query.message or not query.from_user:
+        await query.answer()
+        return
+    if query.message.chat.type == ChatType.PRIVATE:
+        await query.answer("Открой магазин в группе.", show_alert=True)
+        return
+    parts = query.data.split(":")
+    action = parts[1]
+    if action == "home":
+        await query.message.answer("🛒 <b>Предметы и рынок VORTEX</b>", reply_markup=_shop_home_keyboard())
+    elif action == "catalog":
+        lines = ["🛍 <b>Каталог магазина</b>", ""]
+        for item in ITEMS.values():
+            lines.append(f"{item['name']} — <b>{item['price']} V-coins</b>\n{item['description']}")
+        await query.message.answer("\\n".join(lines), reply_markup=_catalog_keyboard())
+    elif action == "buy" and len(parts) == 3 and parts[2] in ITEMS:
+        code = parts[2]
+        item = ITEMS[code]
+        async with aiosqlite.connect(db.path) as conn:
+            await conn.execute("BEGIN IMMEDIATE")
+            await conn.execute("INSERT OR IGNORE INTO wallets(chat_id,user_id,balance) VALUES(?,?,0)",
+                               (query.message.chat.id, query.from_user.id))
+            cur = await conn.execute("SELECT balance FROM wallets WHERE chat_id=? AND user_id=?",
+                                     (query.message.chat.id, query.from_user.id))
+            balance = int((await cur.fetchone())[0])
+            if balance < item["price"]:
+                await conn.rollback()
+                await query.answer(f"Не хватает монет: нужно {item['price']}, у тебя {balance}.", show_alert=True)
+                return
+            await conn.execute("UPDATE wallets SET balance=balance-? WHERE chat_id=? AND user_id=?",
+                               (item["price"], query.message.chat.id, query.from_user.id))
+            await _add_item(conn, query.message.chat.id, query.from_user.id, code, 1)
+            await conn.commit()
+        await query.message.answer(f"✅ Куплено: {item['name']}\nСписано {item['price']} V-coins.")
+        await query.answer("Покупка выполнена!")
+        return
+    elif action == "inventory":
+        await _render_inventory(query.message, db, query.from_user.id)
+    elif action == "use" and len(parts) == 3 and parts[2] in ITEMS:
+        code = parts[2]
+        item = ITEMS[code]
+        if item["kind"] != "consumable":
+            await query.answer("Этот предмет нельзя использовать.", show_alert=True)
+            return
+        async with aiosqlite.connect(db.path) as conn:
+            await conn.execute("BEGIN IMMEDIATE")
+            cur = await conn.execute("SELECT quantity FROM user_items WHERE chat_id=? AND user_id=? AND item_code=?",
+                                     (query.message.chat.id, query.from_user.id, code))
+            row = await cur.fetchone()
+            if not row or int(row[0]) < 1:
+                await conn.rollback()
+                await query.answer("Предмета нет в инвентаре.", show_alert=True)
+                return
+            await conn.execute("UPDATE user_items SET quantity=quantity-1 WHERE chat_id=? AND user_id=? AND item_code=?",
+                               (query.message.chat.id, query.from_user.id, code))
+            await conn.execute("""
+                INSERT INTO game_stats(chat_id,user_id,points,wins,played) VALUES(?,?,5,0,0)
+                ON CONFLICT(chat_id,user_id) DO UPDATE SET points=game_stats.points+5
+            """, (query.message.chat.id, query.from_user.id))
+            await conn.commit()
+        await query.message.answer("🍀 Талисман использован! Начислено +5 игровых очков.")
+    elif action == "market":
+        async with aiosqlite.connect(db.path) as conn:
+            cur = await conn.execute(
+                "SELECT id,seller_id,item_code,quantity,price_each FROM market_listings WHERE chat_id=? ORDER BY id DESC LIMIT 15",
+                (query.message.chat.id,),
+            )
+            rows = await cur.fetchall()
+        kb = InlineKeyboardBuilder()
+        lines = ["🏪 <b>Рынок VORTEX</b>", ""]
+        if not rows:
+            lines.append("Пока нет объявлений.")
+        for listing_id, seller_id, code, qty, price in rows:
+            label = ITEMS.get(code, {}).get("name", code)
+            lines.append(f"№{listing_id} · {label} ×{qty} · {price} за шт.")
+            if seller_id != query.from_user.id:
+                kb.button(text=f"Купить лот №{listing_id}", callback_data=f"shopui:listing:{listing_id}")
+        kb.button(text="🛍 Каталог", callback_data="shopui:catalog")
+        kb.button(text="⬅️ Назад", callback_data="shopui:home")
+        kb.adjust(1)
+        await query.message.answer("\\n".join(lines), reply_markup=kb.as_markup())
+    elif action == "listing" and len(parts) == 3 and parts[2].isdigit():
+        listing_id = int(parts[2])
+        async with aiosqlite.connect(db.path) as conn:
+            await conn.execute("BEGIN IMMEDIATE")
+            cur = await conn.execute(
+                "SELECT seller_id,item_code,quantity,price_each FROM market_listings WHERE id=? AND chat_id=?",
+                (listing_id, query.message.chat.id),
+            )
+            row = await cur.fetchone()
+            if not row:
+                await conn.rollback()
+                await query.answer("Лот уже недоступен.", show_alert=True)
+                return
+            seller_id, code, qty, price = int(row[0]), row[1], int(row[2]), int(row[3])
+            if seller_id == query.from_user.id:
+                await conn.rollback()
+                await query.answer("Нельзя купить собственный лот.", show_alert=True)
+                return
+            total = qty * price
+            await conn.execute("INSERT OR IGNORE INTO wallets(chat_id,user_id,balance) VALUES(?,?,0)",
+                               (query.message.chat.id, query.from_user.id))
+            cur = await conn.execute("SELECT balance FROM wallets WHERE chat_id=? AND user_id=?",
+                                     (query.message.chat.id, query.from_user.id))
+            balance = int((await cur.fetchone())[0])
+            if balance < total:
+                await conn.rollback()
+                await query.answer(f"Нужно {total} V-coins, у тебя {balance}.", show_alert=True)
+                return
+            await conn.execute("UPDATE wallets SET balance=balance-? WHERE chat_id=? AND user_id=?",
+                               (total, query.message.chat.id, query.from_user.id))
+            seller_credit = total * 95 // 100
+            await conn.execute("""
+                INSERT INTO wallets(chat_id,user_id,balance) VALUES(?,?,?)
+                ON CONFLICT(chat_id,user_id) DO UPDATE SET balance=wallets.balance+excluded.balance
+            """, (query.message.chat.id, seller_id, seller_credit))
+            await _add_item(conn, query.message.chat.id, query.from_user.id, code, qty)
+            await conn.execute("DELETE FROM market_listings WHERE id=?", (listing_id,))
+            await conn.commit()
+        await query.message.answer(f"✅ Лот №{listing_id} куплен. Списано {total} V-coins.")
+    else:
+        await query.answer("Неизвестное действие.", show_alert=True)
+        return
+    await query.answer()
