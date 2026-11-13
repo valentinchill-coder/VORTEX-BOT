@@ -53,6 +53,17 @@ async def rank_denial(message: Message, db: Database, bot: Bot,
     needed = ACTION_RANK.get(action, 99)
     name = RANKS[needed][0] if needed in RANKS else "нужный ранг"
     await message.answer(f"Недостаточно прав. Для этого действия нужен ранг «{name}» или выше.")
+    try:
+        await db.log_moderation_action(
+            message.chat.id,
+            message.from_user.id,
+            0,
+            "permission_denied",
+            f"Попытка выполнить действие: {action}",
+        )
+    except Exception:
+        # Audit failures must not block the permission check.
+        pass
     return False
 
 
