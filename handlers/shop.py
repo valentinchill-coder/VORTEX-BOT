@@ -547,8 +547,7 @@ async def gift_button_callback(query: CallbackQuery):
         return
     _pending_shop_action[(query.message.chat.id, query.from_user.id)] = ("gift", code)
     await query.message.answer(
-        f"🎁 Чтобы подарить {ITEMS[code]['name']}, ответь любым текстом на сообщение получателя. "
-        "Затем отправь количество обычным числом."
+        f"🎁 Чтобы подарить {ITEMS[code]['name']}, ответь на сообщение получателя числом количества (например, 2)."
     )
     await query.answer()
 
