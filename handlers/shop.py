@@ -404,7 +404,7 @@ async def _render_inventory(message, db, user_id):
     kb.adjust(1)
     await message.answer("\\n".join(lines), reply_markup=kb.as_markup())
 
-@router.callback_query(lambda q: q.data and q.data.startswith("shopui:"))
+@router.callback_query(lambda q: q.data and q.data.startswith("shopui:") and not q.data.startswith(("shopui:gift:", "shopui:sell:")))
 async def shop_ui_callback(query: CallbackQuery, db: Database):
     if not query.message or not query.from_user:
         await query.answer()
