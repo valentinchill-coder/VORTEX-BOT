@@ -53,6 +53,8 @@ def parse_intent(text: str) -> str | None:
     rank_match = re.search(r"\b(?:выдай|выдать|назначь|назначить|установи)\s+(?:ему\s+|ей\s+)?(?:ранг\s*)?([0-7])\b", value)
     if rank_match:
         return f"__rank_set_{rank_match.group(1)}__"
+    if re.search(r"\b(выдать ранг|назначить ранг|поставить ранг)\b", value):
+        return "__rank_usage__"
 
     # Read-only information and navigation.
     if re.search(r"\b(баланс|сколько у меня (?:монет|денег)|покажи (?:мои )?монеты)\b", value):
@@ -222,7 +224,7 @@ async def natural_language_request(message: Message, db: Database, bot, owner_id
             "Команды тоже продолжают работать."
         )
         return
-    if intent in ("__myrank__", "__ranks__", "__rank_remove__", "__rank_up__", "__rank_down__") or intent.startswith("__rank_set_"):
+    if intent in ("__myrank__", "__ranks__", "__rank_usage__", "__rank_remove__", "__rank_up__", "__rank_down__") or intent.startswith("__rank_set_"):
         await ranks.handle_natural_rank(message, db, bot, owner_ids, intent)
         return
     if intent == "__need_unban_id__":
