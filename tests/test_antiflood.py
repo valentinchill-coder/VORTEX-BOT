@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 from aiogram.types import Chat, Message, User
 
-from middlewares.antiflood import AntiFloodMiddleware
+from middlewares.antiflood import AntiFloodMiddleware, contains_blocked_word
 
 
 class AntiFloodActivityTests(unittest.IsolatedAsyncioTestCase):
@@ -37,3 +37,12 @@ class AntiFloodActivityTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BlockedWordMatchingTests(unittest.TestCase):
+    def test_blocked_word_matching_uses_word_boundaries(self):
+        self.assertTrue(contains_blocked_word("This is BAD phrase!", ["bad phrase"]))
+        self.assertTrue(contains_blocked_word("идиот, хватит", ["идиот"]))
+        self.assertFalse(contains_blocked_word("class assignment", ["ass"]))
+        self.assertFalse(contains_blocked_word("badly phrased", ["bad phrase"]))
+
