@@ -39,6 +39,21 @@ def parse_intent(text: str) -> str | None:
     value = re.sub(r"[!?.,]+", " ", value)
     value = re.sub(r"\s+", " ", value).strip()
 
+    # Moderation ranks: natural-language aliases.
+    if re.search(r"\b(мой ранг|какой у меня ранг|покажи мой ранг)\b", value):
+        return "__myrank__"
+    if re.search(r"\b(покажи ранги|список рангов|иерархия рангов)\b", value):
+        return "__ranks__"
+    if re.search(r"\b(сними ранг|обнули ранг|убери ранг)\b", value):
+        return "__rank_remove__"
+    if re.search(r"\b(повысить|повышение|подними ранг)\b", value):
+        return "__rank_up__"
+    if re.search(r"\b(понизить|понижение|опусти ранг)\b", value):
+        return "__rank_down__"
+    rank_match = re.search(r"\b(?:выдай|выдать|назначь|назначить|установи)\s+(?:ему\s+|ей\s+)?(?:ранг\s*)?([0-7])\b", value)
+    if rank_match:
+        return f"__rank_set_{rank_match.group(1)}__"
+
     # Read-only information and navigation.
     if re.search(r"\b(баланс|сколько у меня (?:монет|денег)|покажи (?:мои )?монеты)\b", value):
         return "/balance"
@@ -206,6 +221,9 @@ async def natural_language_request(message: Message, db: Database, bot, owner_id
             "Для действий с другим участником ответь своим сообщением на его сообщение. "
             "Команды тоже продолжают работать."
         )
+        return
+    if intent in ("__myrank__", "__ranks__", "__rank_remove__", "__rank_up__", "__rank_down__") or intent.startswith("__rank_set_"):
+        await ranks.handle_natural_rank(message, db, bot, owner_ids, intent)
         return
     if intent == "__need_unban_id__":
         await message.answer("Напиши Telegram ID в запросе: «Разбань 123456789».")
