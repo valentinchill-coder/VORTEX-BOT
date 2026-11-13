@@ -14,6 +14,7 @@ class AntiFloodMiddleware(BaseMiddleware):
         self.limit = limit
         self.window = window
         self.messages = defaultdict(deque)
+        self._checks = 0
 
     async def __call__(self, handler, event, data):
         if (
@@ -43,6 +44,13 @@ class AntiFloodMiddleware(BaseMiddleware):
         while queue and now - queue[0] > self.window:
             queue.popleft()
         queue.append(now)
+        self._checks += 1
+        if self._checks % 256 == 0:
+            for stale_key, stale_queue in list(self.messages.items()):
+                while stale_queue and now - stale_queue[0] > self.window:
+                    stale_queue.popleft()
+                if not stale_queue:
+                    self.messages.pop(stale_key, None)
 
         if len(queue) > self.limit:
             queue.clear()
