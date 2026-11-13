@@ -8,6 +8,14 @@ from aiogram.enums import ChatType
 from aiogram.types import Message
 
 
+def contains_blocked_word(content: str, blocked_words: list[str]) -> bool:
+    for word in blocked_words:
+        normalized = word.strip().casefold()
+        if normalized and re.search(rf"(?<!\\w){re.escape(normalized)}(?!\\w)", content.casefold()):
+            return True
+    return False
+
+
 class AntiFloodMiddleware(BaseMiddleware):
     """Track group activity and warn every user who exceeds the message limit."""
 
@@ -49,7 +57,7 @@ class AntiFloodMiddleware(BaseMiddleware):
         if content and filter_reason is None and settings.get("word_filter_enabled", "0") == "1" and db:
             try:
                 blocked_words = await db.list_blocked_words(event.chat.id)
-                if any(word.casefold() in content for word in blocked_words):
+                if contains_blocked_word(content, blocked_words):
                     filter_reason = "filtered_word"
             except Exception:
                 pass
