@@ -6,6 +6,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 
 from database.db import Database
+from handlers.ranks import get_rank, RANKS
 
 router = Router()
 
@@ -23,7 +24,7 @@ def _rank(messages: int) -> str:
 
 
 @router.message(Command("profile"))
-async def profile_command(message: Message, db: Database):
+async def profile_command(message: Message, db: Database, owner_ids: frozenset[int]):
     if message.chat.type == ChatType.PRIVATE:
         await message.answer("Открой команду /profile в группе, чтобы посмотреть профиль.")
         return
@@ -37,12 +38,14 @@ async def profile_command(message: Message, db: Database):
     username = f"@{escape(target.username)}" if target.username else "не указан"
     messages = user["message_count"] if user else 0
     rank = _rank(messages)
+    moderation_rank = await get_rank(db, message.bot, message.chat.id, target.id, owner_ids)
     first_seen = user["first_seen"][:10] if user else "пока нет данных"
     await message.answer(
         f"👤 <b>Профиль участника</b>\n\n"
         f"Имя: <b>{name}</b>\n"
         f"Username: {username}\n"
-        f"Ранг: {rank}\n"
+        f"Ранг активности: {rank}\n"
+        f"Ранг модерации: <b>{RANKS[moderation_rank][0]}</b>\n"
         f"Сообщений: <b>{messages}</b>\n"
         f"Репутация: <b>{data['reputation']}</b>\n"
         f"Предупреждений: <b>{data['warnings']}</b>\n"
@@ -129,7 +132,7 @@ def profile_keyboard():
     return kb.as_markup()
 
 @router.callback_query(lambda q: q.data and q.data.startswith("profile:"))
-async def profile_button_callback(query: CallbackQuery, db: Database):
+async def profile_button_callback(query: CallbackQuery, db: Database, owner_ids: frozenset[int]):
     if not query.message or not query.from_user:
         await query.answer()
         return
@@ -145,10 +148,12 @@ async def profile_button_callback(query: CallbackQuery, db: Database):
         user = data["user"] or {}
         messages = int(user.get("message_count", 0))
         username = f"@{escape(query.from_user.username)}" if query.from_user.username else "не указан"
+        moderation_rank = await get_rank(db, query.bot, query.message.chat.id, query.from_user.id, owner_ids)
         first_seen = user.get("first_seen", "пока нет данных")[:10]
         await query.message.answer(
             f"👤 <b>Твой профиль</b>\n\nИмя: <b>{escape(query.from_user.full_name)}</b>\n"
-            f"Username: {username}\nРанг: {_rank(messages)}\nСообщений: <b>{messages}</b>\n"
+            f"Username: {username}\nРанг активности: {_rank(messages)}\n"
+            f"Ранг модерации: <b>{RANKS[moderation_rank][0]}</b>\nСообщений: <b>{messages}</b>\n"
             f"Репутация: <b>{data['reputation']}</b>\nПредупреждений: <b>{data['warnings']}</b>\n"
             f"В чате с: {first_seen}"
         )
