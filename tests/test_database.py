@@ -82,6 +82,22 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(remaining, before)
         self.assertEqual(await self.db.get_balance(-1001, 10), before)
 
+    async def test_moderation_ranks_are_group_scoped_and_removable(self):
+        self.assertEqual(await self.db.get_moderation_rank(-1001, 10), 0)
+        await self.db.set_moderation_rank(-1001, 10, 3, 99)
+        self.assertEqual(await self.db.get_moderation_rank(-1001, 10), 3)
+        self.assertEqual(await self.db.get_moderation_rank(-1002, 10), 0)
+        await self.db.set_moderation_rank(-1001, 10, 5, 99)
+        self.assertEqual(await self.db.get_moderation_rank(-1001, 10), 5)
+        await self.db.set_moderation_rank(-1001, 10, 0, 99)
+        self.assertEqual(await self.db.get_moderation_rank(-1001, 10), 0)
+
+    async def test_moderation_rank_rejects_reserved_ranks(self):
+        with self.assertRaises(ValueError):
+            await self.db.set_moderation_rank(-1001, 10, 6, 99)
+        with self.assertRaises(ValueError):
+            await self.db.set_moderation_rank(-1001, 10, -1, 99)
+
     async def test_database_rejects_self_reputation_and_negative_game_points(self):
         self.assertFalse(await self.db.give_reputation(-1001, 10, 10))
         with self.assertRaises(ValueError):
