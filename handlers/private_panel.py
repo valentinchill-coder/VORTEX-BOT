@@ -63,6 +63,7 @@ def group_keyboard(chat_id: int):
     kb.button(text="🏆 Активные участники", callback_data=f"vp:top:{chat_id}")
     kb.button(text="🛡 Модерация", callback_data=f"vp:mod:{chat_id}")
     kb.button(text="⚙️ Настройки защиты", callback_data=f"vp:settings:{chat_id}")
+    kb.button(text="📋 Журнал действий", callback_data=f"vp:audit:{chat_id}")
     kb.button(text="🔄 Обновить", callback_data=f"vp:group:{chat_id}")
     kb.button(text="⬅️ К списку групп", callback_data="vp:groups")
     kb.adjust(1)
@@ -534,3 +535,33 @@ async def update_group_setting(query: CallbackQuery, bot: Bot, db: Database, own
     await db.set_chat_setting(chat_id, key, next_value, query.from_user.id)
     await _render_group_settings(query, chat_id, db, bot, owner_ids)
     await _safe_query_answer(query, "Настройка сохранена.")
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:audit:"))
+async def group_audit_log(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not query.message or not query.from_user or query.message.chat.type != "private":
+        await _safe_query_answer(query)
+        return
+    try:
+        chat_id = int(query.data.rsplit(":", 1)[1])
+    except (ValueError, IndexError):
+        await _safe_query_answer(query, "Некорректная группа.", show_alert=True)
+        return
+    if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+        await _safe_query_answer(query, "Доступ запрещён.", show_alert=True)
+        return
+    rows = await db.recent_moderation_actions(chat_id, 10)
+    lines = ["📋 <b>Последние действия администраторов</b>", ""]
+    for row in rows:
+        action = escape(str(row.get("action", "action")))
+        details = escape(str(row.get("details", "")))
+        stamp = escape(str(row.get("created_at", ""))[:16].replace("T", " "))
+        target = f" → <code>{int(row.get('target_id', 0))}</code>" if int(row.get("target_id", 0)) else ""
+        lines.append(f"• <b>{action}</b>{target}\\n  <code>{stamp}</code> {details}")
+    if not rows:
+        lines.append("Журнал пока пуст.")
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🔄 Обновить", callback_data=f"vp:audit:{chat_id}")
+    kb.button(text="⬅️ Назад", callback_data=f"vp:group:{chat_id}")
+    kb.adjust(1)
+    await _safe_edit(query.message, "\\n".join(lines), reply_markup=kb.as_markup())
+    await _safe_query_answer(query)
