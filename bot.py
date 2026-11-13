@@ -237,6 +237,7 @@ async def main():
             BotCommand(command="kick", description="Исключить пользователя (ответом)"),
             BotCommand(command="ban", description="Заблокировать пользователя (ответом)"),
             BotCommand(command="unban", description="Разблокировать по ID"),
+            BotCommand(command="audit", description="Журнал действий модерации"),
         ]
         await bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
         await bot.set_my_commands(group_commands, scope=BotCommandScopeAllGroupChats())
