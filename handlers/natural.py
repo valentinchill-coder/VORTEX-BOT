@@ -145,7 +145,8 @@ def parse_intent(text: str) -> str | None:
     if re.search(r"\b(очисти предупреждения|сбрось предупреждения)\b", value):
         return "/clearwarns"
     if re.search(r"\b(сними мут|размути|размут|анмут|верни возможность писать)\b", value):
-        return "/unmute"
+        username = re.search(r"@([a-z0-9_]{5,32})", raw, re.I)
+        return f"/unmute @{username.group(1)}" if username else "/unmute"
     if re.search(r"\b(замути|замутить|замуть|мут|mute|ограничь писать)\b", value):
         duration = re.search(r"(\d+)\s*(минут\w*|мин\b|час\w*|ч\b|дн\w*|д\b)", value)
         if not duration:
