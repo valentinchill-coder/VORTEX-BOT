@@ -47,6 +47,9 @@ class NaturalLanguageIntentTests(unittest.TestCase):
         self.assertEqual(parse_intent("Покажи журнал модерации"), "/audit")
 
     def test_short_moderation_aliases_are_recognized(self):
+        self.assertEqual(parse_intent("Варн"), "/warn")
+        self.assertEqual(parse_intent("Варн флуд"), "/warn флуд")
+        self.assertEqual(parse_intent("Warn"), "/warn")
         self.assertEqual(parse_intent("Бан"), "/ban")
         self.assertEqual(parse_intent("Замуть"), "/mute 10m")
         self.assertEqual(parse_intent("Мут на 15 минут"), "/mute 15m")
