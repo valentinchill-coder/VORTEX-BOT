@@ -161,7 +161,7 @@ async def _dispatch(message: Message, command_text: str, db: Database, bot, owne
         "/pay": lambda: economy.pay_command(synthetic, db),
         "/topmoney": lambda: economy.top_money_command(synthetic, db),
         "/exchange": lambda: economy.exchange_command(synthetic, db),
-        "/profile": lambda: profile.profile_command(synthetic, db),
+        "/profile": lambda: profile.profile_command(synthetic, db, owner_ids),
         "/rep": lambda: profile.reputation_command(synthetic, db),
         "/toprep": lambda: profile.top_reputation_command(synthetic, db),
         "/topactivity": lambda: profile.top_activity_command(synthetic, db),
