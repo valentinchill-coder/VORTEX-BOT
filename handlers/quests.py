@@ -46,6 +46,18 @@ def quest_keyboard() -> InlineKeyboardMarkup:
     kb.adjust(1)
     return kb.as_markup()
 
+def private_quest_keyboard() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="⬅️ Главное меню", callback_data="vortex:home")
+    return kb.as_markup()
+
+
+PRIVATE_QUEST_INFO = (
+    "📜 <b>Ежедневные задания VORTEX</b>\\n\\n"
+    "Задания считаются отдельно для каждой группы: сообщения, сыгранные игры и победы. "
+    "Чтобы увидеть прогресс и забрать награды, открой этот раздел в нужной группе."
+)
+
 
 async def _safe_query_answer(query: CallbackQuery, *args, **kwargs) -> None:
     try:
@@ -113,7 +125,8 @@ async def quests_show_callback(query: CallbackQuery, db: Database):
         await _safe_query_answer(query)
         return
     if query.message.chat.type == ChatType.PRIVATE:
-        await _safe_query_answer(query, "Задания доступны в группе.", show_alert=True)
+        await query.message.edit_text(PRIVATE_QUEST_INFO, reply_markup=private_quest_keyboard())
+        await _safe_query_answer(query)
         return
     progress = await db.daily_quest_progress(query.message.chat.id, query.from_user.id)
     claimed = await db.claimed_daily_quests(query.message.chat.id, query.from_user.id)
@@ -127,7 +140,8 @@ async def quests_claim_callback(query: CallbackQuery, db: Database):
         await _safe_query_answer(query)
         return
     if query.message.chat.type == ChatType.PRIVATE:
-        await _safe_query_answer(query, "Задания доступны в группе.", show_alert=True)
+        await query.message.edit_text(PRIVATE_QUEST_INFO, reply_markup=private_quest_keyboard())
+        await _safe_query_answer(query)
         return
     claimed, balance, reward_total, titles = await _claim_rewards(
         db, query.message.chat.id, query.from_user.id
