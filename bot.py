@@ -11,7 +11,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 
 from config import load_settings
 from database.db import Database
-from handlers import start, moderation, admin, profile, economy, games, shop
+from handlers import start, moderation, admin, profile, economy, games, shop, natural
 from middlewares.antiflood import AntiFloodMiddleware
 from handlers.shop import initialize_shop
 
@@ -48,6 +48,8 @@ def create_dispatcher(db: Database, owner_ids: frozenset[int]) -> Dispatcher:
     dp.include_router(economy.router)
     dp.include_router(games.router)
     dp.include_router(shop.router)
+    # Keep natural-language matching last so existing pending inputs and game turns win first.
+    dp.include_router(natural.router)
     dp.chat_member.register(
         welcome_new_members,
         ChatMemberUpdatedFilter(JOIN_TRANSITION),
