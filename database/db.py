@@ -31,6 +31,20 @@ class Database:
                 )
             """)
             await db.execute("""
+                CREATE TABLE IF NOT EXISTS moderation_audit (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER NOT NULL,
+                    actor_id INTEGER NOT NULL,
+                    target_id INTEGER NOT NULL,
+                    action TEXT NOT NULL,
+                    details TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                )
+            """)
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_moderation_audit_chat_id ON moderation_audit(chat_id, id DESC)"
+            )
+            await db.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     chat_id INTEGER NOT NULL,
                     user_id INTEGER NOT NULL,
@@ -134,6 +148,32 @@ class Database:
                 (chat_id, event_type),
             )
             return int((await cursor.fetchone())[0])
+
+    async def log_moderation_action(
+        self, chat_id: int, actor_id: int, target_id: int, action: str, details: str = ""
+    ) -> None:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """INSERT INTO moderation_audit(
+                    chat_id,actor_id,target_id,action,details,created_at
+                ) VALUES(?,?,?,?,?,?)""",
+                (chat_id, actor_id, target_id, action, details[:500], _now()),
+            )
+            await db.commit()
+
+    async def recent_moderation_actions(
+        self, chat_id: int, limit: int = 10
+    ) -> list[dict]:
+        limit = max(1, min(int(limit), 50))
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT actor_id,target_id,action,details,created_at
+                   FROM moderation_audit WHERE chat_id=?
+                   ORDER BY id DESC LIMIT ?""",
+                (chat_id, limit),
+            )
+            return [dict(row) for row in await cursor.fetchall()]
 
     async def register_message(self, chat_id: int, user_id: int, username: str | None, full_name: str) -> None:
         now = _now()
