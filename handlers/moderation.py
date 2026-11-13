@@ -49,6 +49,37 @@ async def check_admin(message: Message, bot: Bot, owner_ids: frozenset[int]) -> 
     return allowed
 
 
+
+async def bot_can_restrict(message: Message, bot: Bot) -> bool:
+    """Return whether the bot is an administrator allowed to restrict members."""
+    try:
+        me = await bot.get_me()
+        member = await bot.get_chat_member(message.chat.id, me.id)
+    except TelegramAPIError as exc:
+        await message.answer(f"Не удалось проверить права бота: {exc.message}")
+        return False
+    if member.status not in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR):
+        await message.answer("У бота нет прав администратора. Назначь VORTEX BOT администратором группы.")
+        return False
+    if member.status != ChatMemberStatus.CREATOR and not getattr(member, "can_restrict_members", False):
+        await message.answer("У бота нет права «Блокировка участников». Включи его в настройках администраторов группы.")
+        return False
+    return True
+
+
+async def target_is_restrictable(message: Message, bot: Bot, target) -> bool:
+    """Telegram admins/creator cannot be muted, kicked or banned by the bot."""
+    try:
+        member = await bot.get_chat_member(message.chat.id, target.id)
+    except TelegramAPIError as exc:
+        await message.answer(f"Не удалось проверить участника: {exc.message}")
+        return False
+    if member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR):
+        await message.answer("Нельзя ограничить, исключить или заблокировать администратора группы.")
+        return False
+    return True
+
+
 @router.message(Command("warn"))
 async def warn(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not await rank_denial(message, db, bot, owner_ids, "warn"):
@@ -105,6 +136,8 @@ async def mute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
     target = await target_from_reply(message)
     if not target:
         return
+    if not await bot_can_restrict(message, bot) or not await target_is_restrictable(message, bot, target):
+        return
     parts = (message.text or "").split(maxsplit=1)
     duration = parse_duration(parts[1].strip()) if len(parts) > 1 else timedelta(minutes=10)
     if not duration:
@@ -143,6 +176,8 @@ async def unmute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[
     target = await target_from_reply(message)
     if not target:
         return
+    if not await bot_can_restrict(message, bot) or not await target_is_restrictable(message, bot, target):
+        return
     try:
         chat = await bot.get_chat(message.chat.id)
         await bot.restrict_chat_member(
@@ -175,6 +210,8 @@ async def kick(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
     target = await target_from_reply(message)
     if not target:
         return
+    if not await bot_can_restrict(message, bot) or not await target_is_restrictable(message, bot, target):
+        return
     try:
         await bot.ban_chat_member(message.chat.id, target.id)
         await bot.unban_chat_member(message.chat.id, target.id, only_if_banned=True)
@@ -206,6 +243,8 @@ async def unban(message: Message, bot: Bot, db: Database, owner_ids: frozenset[i
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) != 2 or not parts[1].isdigit():
         await message.answer("Укажи Telegram ID: /unban 123456789")
+        return
+    if not await bot_can_restrict(message, bot):
         return
     try:
         target_id = int(parts[1])
