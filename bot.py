@@ -20,7 +20,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 
 from config import load_settings
 from database.db import Database
-from handlers import start, moderation, admin, profile, economy, games, shop, natural, private_panel
+from handlers import start, moderation, admin, profile, economy, games, shop, natural, private_panel, ranks
 from middlewares.antiflood import AntiFloodMiddleware
 from handlers.shop import initialize_shop
 
@@ -119,6 +119,7 @@ def create_dispatcher(db: Database, owner_ids: frozenset[int]) -> Dispatcher:
     dp.include_router(private_panel.router)
     dp.include_router(start.router)
     dp.include_router(moderation.router)
+    dp.include_router(ranks.router)
     dp.include_router(admin.router)
     dp.include_router(profile.router)
     dp.include_router(economy.router)
@@ -223,6 +224,9 @@ async def main():
             BotCommand(command="guess", description="Сделать ход в игре"),
             BotCommand(command="topgames", description="Рейтинг игр группы"),
             BotCommand(command="stats", description="Статистика группы"),
+            BotCommand(command="ranks", description="Иерархия модерации"),
+            BotCommand(command="myrank", description="Мой ранг модерации"),
+            BotCommand(command="setrank", description="Назначить ранг (ответом)"),
         ]
         admin_commands = group_commands + [
             BotCommand(command="warn", description="Выдать предупреждение (ответом)"),
