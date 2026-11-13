@@ -667,7 +667,7 @@ class Database:
         return defaults
 
     async def set_chat_setting(self, chat_id: int, key: str, value: str, actor_id: int) -> None:
-        allowed = {"antiflood_enabled": {"0", "1"}, "antiflood_limit": {"4", "6", "8", "10"}, "antiflood_window": {"5", "8", "10", "15"}}
+        allowed = {"antiflood_enabled": {"0", "1"}, "antiflood_limit": {"4", "6", "8", "10"}, "antiflood_window": {"5", "8", "10", "15"}, "link_filter_enabled": {"0", "1"}, "word_filter_enabled": {"0", "1"}}
         if key not in allowed or str(value) not in allowed[key]:
             raise ValueError("Unsupported chat setting.")
         async with aiosqlite.connect(self.path) as db:
