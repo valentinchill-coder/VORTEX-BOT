@@ -320,6 +320,10 @@ async def buy_listing_command(message: Message, db: Database):
             await message.answer("Объявление уже продано или не найдено.")
             return
         seller_id, code, quantity, price = int(row[0]), row[1], int(row[2]), int(row[3])
+        if code not in ITEMS:
+            await conn.rollback()
+            await message.answer("Этот предмет больше не поддерживается. Объявление нельзя купить.")
+            return
         if seller_id == message.from_user.id:
             await conn.rollback()
             await message.answer("Нельзя покупать собственное объявление.")
@@ -342,7 +346,8 @@ async def buy_listing_command(message: Message, db: Database):
             "UPDATE wallets SET balance=balance-? WHERE chat_id=? AND user_id=?",
             (total, message.chat.id, message.from_user.id),
         )
-        seller_credit = total * 95 // 100
+        commission = total * 5 // 100
+        seller_credit = total - commission
         await conn.execute("""
             INSERT INTO wallets(chat_id,user_id,balance) VALUES(?,?,?)
             ON CONFLICT(chat_id,user_id) DO UPDATE SET balance=wallets.balance+excluded.balance
@@ -403,7 +408,7 @@ async def _render_inventory(message, db, user_id):
     kb.button(text="🏪 Рынок", callback_data="shopui:market")
     kb.button(text="⬅️ Назад", callback_data="shopui:home")
     kb.adjust(1)
-    await message.answer("\\n".join(lines), reply_markup=kb.as_markup())
+    await message.answer("\n".join(lines), reply_markup=kb.as_markup())
 
 @router.callback_query(lambda q: q.data and q.data.startswith("shopui:") and not q.data.startswith(("shopui:gift:", "shopui:sell:")))
 async def shop_ui_callback(query: CallbackQuery, db: Database):
@@ -421,7 +426,7 @@ async def shop_ui_callback(query: CallbackQuery, db: Database):
         lines = ["🛍 <b>Каталог магазина</b>", ""]
         for item in ITEMS.values():
             lines.append(f"{item['name']} — <b>{item['price']} V-coins</b>\n{item['description']}")
-        await query.message.answer("\\n".join(lines), reply_markup=_catalog_keyboard())
+        await query.message.answer("\n".join(lines), reply_markup=_catalog_keyboard())
     elif action == "buy" and len(parts) == 3 and parts[2] in ITEMS:
         code = parts[2]
         item = ITEMS[code]
@@ -488,7 +493,7 @@ async def shop_ui_callback(query: CallbackQuery, db: Database):
         kb.button(text="🛍 Каталог", callback_data="shopui:catalog")
         kb.button(text="⬅️ Назад", callback_data="shopui:home")
         kb.adjust(1)
-        await query.message.answer("\\n".join(lines), reply_markup=kb.as_markup())
+        await query.message.answer("\n".join(lines), reply_markup=kb.as_markup())
     elif action == "listing" and len(parts) == 3 and parts[2].isdigit():
         listing_id = int(parts[2])
         async with aiosqlite.connect(db.path) as conn:
@@ -503,6 +508,10 @@ async def shop_ui_callback(query: CallbackQuery, db: Database):
                 await query.answer("Лот уже недоступен.", show_alert=True)
                 return
             seller_id, code, qty, price = int(row[0]), row[1], int(row[2]), int(row[3])
+            if code not in ITEMS:
+                await conn.rollback()
+                await query.answer("Этот предмет больше не поддерживается.", show_alert=True)
+                return
             if seller_id == query.from_user.id:
                 await conn.rollback()
                 await query.answer("Нельзя купить собственный лот.", show_alert=True)
@@ -543,6 +552,9 @@ async def gift_button_callback(query: CallbackQuery):
     if not query.message or not query.from_user:
         await query.answer()
         return
+    if query.message.chat.type == ChatType.PRIVATE:
+        await query.answer("Подарки доступны в группе.", show_alert=True)
+        return
     code = query.data.split(":")[-1]
     if code not in ITEMS:
         await query.answer("Предмет не найден.", show_alert=True)
@@ -558,6 +570,9 @@ async def sell_button_callback(query: CallbackQuery):
     if not query.message or not query.from_user:
         await query.answer()
         return
+    if query.message.chat.type == ChatType.PRIVATE:
+        await query.answer("Продажа доступна в группе.", show_alert=True)
+        return
     code = query.data.split(":")[-1]
     if code not in ITEMS:
         await query.answer("Предмет не найден.", show_alert=True)
@@ -568,8 +583,17 @@ async def sell_button_callback(query: CallbackQuery):
     )
     await query.answer()
 
-@router.message(lambda m: m.chat.type != ChatType.PRIVATE and m.from_user is not None
+@router.message(Command("cancel"), lambda m: m.chat.type != ChatType.PRIVATE and m.from_user is not None
                 and (m.chat.id, m.from_user.id) in _pending_shop_action)
+async def cancel_shop_action(message: Message):
+    if message.from_user:
+        _pending_shop_action.pop((message.chat.id, message.from_user.id), None)
+    await message.answer("Операция с предметом отменена.")
+
+
+@router.message(lambda m: m.chat.type != ChatType.PRIVATE and m.from_user is not None
+                and (m.chat.id, m.from_user.id) in _pending_shop_action
+                and not (m.text or "").startswith("/"))
 async def handle_shop_plain_input(message: Message, db: Database):
     if not message.from_user:
         return
