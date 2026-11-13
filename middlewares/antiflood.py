@@ -23,22 +23,9 @@ class AntiFloodMiddleware(BaseMiddleware):
             or event.from_user.is_bot
             or event.chat.type == ChatType.PRIVATE
         ):
-            if db:
-            try:
-                await db.register_message(
-                    event.chat.id,
-                    event.from_user.id,
-                    event.from_user.username,
-                    event.from_user.full_name,
-                )
-            except Exception:
-                # Activity tracking must never block normal group messages.
-                pass
-
-        return await handler(event, data)
+            return await handler(event, data)
 
         db = data.get("db")
-
         key = (event.chat.id, event.from_user.id)
         now = time.monotonic()
         queue = self.messages[key]
@@ -79,5 +66,18 @@ class AntiFloodMiddleware(BaseMiddleware):
                 except Exception:
                     pass
             return None
+
+        # Count only messages that passed the anti-flood check.
+        if db:
+            try:
+                await db.register_message(
+                    event.chat.id,
+                    event.from_user.id,
+                    event.from_user.username,
+                    event.from_user.full_name,
+                )
+            except Exception:
+                # Activity tracking must never block normal group messages.
+                pass
 
         return await handler(event, data)
