@@ -23,7 +23,7 @@ RANKS = {
 
 ACTION_RANK = {
     "warnings": 1, "warn": 2, "clearwarns": 3, "mute": 3,
-    "unmute": 3, "kick": 4, "ban": 4, "unban": 4,
+    "unmute": 3, "kick": 4, "ban": 4, "unban": 4, "audit": 5,
 }
 
 async def get_rank(db: Database, bot: Bot, chat_id: int, user_id: int,
