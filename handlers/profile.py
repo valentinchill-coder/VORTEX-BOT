@@ -147,9 +147,9 @@ async def profile_button_callback(query: CallbackQuery, db: Database):
         username = f"@{escape(query.from_user.username)}" if query.from_user.username else "не указан"
         first_seen = user.get("first_seen", "пока нет данных")[:10]
         await query.message.answer(
-            f"👤 <b>Твой профиль</b>\\n\\nИмя: <b>{escape(query.from_user.full_name)}</b>\\n"
-            f"Username: {username}\\nРанг: {_rank(messages)}\\nСообщений: <b>{messages}</b>\\n"
-            f"Репутация: <b>{data['reputation']}</b>\\nПредупреждений: <b>{data['warnings']}</b>\\n"
+            f"👤 <b>Твой профиль</b>\n\nИмя: <b>{escape(query.from_user.full_name)}</b>\n"
+            f"Username: {username}\nРанг: {_rank(messages)}\nСообщений: <b>{messages}</b>\n"
+            f"Репутация: <b>{data['reputation']}</b>\nПредупреждений: <b>{data['warnings']}</b>\n"
             f"В чате с: {first_seen}"
         )
     elif action in ("toprep", "topactivity"):
@@ -164,7 +164,7 @@ async def profile_button_callback(query: CallbackQuery, db: Database):
                 name = f"Участник {uid}"
             suffix = "⭐" if action == "toprep" else "сообщений"
             lines.append(f"{i}. {name} — <b>{score}</b> {suffix}")
-        await query.message.answer("\\n".join(lines) if rows else "Пока данных нет.")
+        await query.message.answer("\n".join(lines) if rows else "Пока данных нет.")
     await query.answer()
 
 @router.message(lambda m: m.from_user is not None and m.chat.type != ChatType.PRIVATE
