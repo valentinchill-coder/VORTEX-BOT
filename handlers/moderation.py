@@ -29,6 +29,9 @@ async def target_from_reply(message: Message):
         await message.answer("Используй команду ответом на сообщение пользователя.")
         return None
     target = message.reply_to_message.from_user
+    if message.from_user and target.id == message.from_user.id:
+        await message.answer("Нельзя применять это действие к самому себе.")
+        return None
     if target.is_bot:
         await message.answer("Нельзя применить это действие к боту.")
         return None
