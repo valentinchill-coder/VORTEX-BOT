@@ -683,14 +683,20 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute("INSERT OR IGNORE INTO blocked_words(chat_id,word,added_by,created_at) VALUES(?,?,?,?)", (chat_id, word, actor_id, _now()))
             await db.commit()
-            return cursor.rowcount > 0
+            added = cursor.rowcount > 0
+        if added:
+            await self.log_moderation_action(chat_id, actor_id, 0, "filter_word_add", word)
+        return added
 
-    async def remove_blocked_word(self, chat_id: int, word: str) -> bool:
+    async def remove_blocked_word(self, chat_id: int, word: str, actor_id: int = 0) -> bool:
         word = " ".join(word.strip().split()).casefold()
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute("DELETE FROM blocked_words WHERE chat_id=? AND word=?", (chat_id, word))
             await db.commit()
-            return cursor.rowcount > 0
+            removed = cursor.rowcount > 0
+        if removed:
+            await self.log_moderation_action(chat_id, actor_id, 0, "filter_word_remove", word)
+        return removed
 
     async def list_blocked_words(self, chat_id: int) -> list[str]:
         async with aiosqlite.connect(self.path) as db:
