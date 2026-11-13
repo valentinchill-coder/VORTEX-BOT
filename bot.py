@@ -206,6 +206,7 @@ async def main():
             BotCommand(command="rep", description="Выдать репутацию (ответом)"),
             BotCommand(command="toprep", description="Топ репутации группы"),
             BotCommand(command="topactivity", description="Топ активности группы"),
+            BotCommand(command="achievements", description="Мои достижения"),
             BotCommand(command="balance", description="Баланс участника (ответом)"),
             BotCommand(command="daily", description="Получить ежедневную награду"),
             BotCommand(command="pay", description="Перевести V-coins (ответом)"),
