@@ -102,6 +102,9 @@ def parse_intent(text: str) -> str | None:
     match = re.search(r"\b(?:купи|покупай)\s+(?:лот|объявление)\s*(?:номер\s*)?(\d+)\b", value)
     if match:
         return f"/buylisting {match.group(1)}"
+    match = re.search(r"\b(?:сними|отмени|верни)\s+(?:свой\s+)?(?:лот|объявление)\s*(?:номер\s*)?(\d+)\b", value)
+    if match:
+        return f"/cancel_listing {match.group(1)}"
 
     # Moderation. These actions still go through the existing admin permission checks.
     if re.search(r"\b(выдай предупреждение|предупреди участника|предупреждение пользователю)\b", value):
@@ -153,6 +156,7 @@ async def _dispatch(message: Message, command_text: str, db: Database, bot, owne
         "/sellitem": lambda: shop.sell_item_command(synthetic, db),
         "/market": lambda: shop.market_command(synthetic, db),
         "/buylisting": lambda: shop.buy_listing_command(synthetic, db),
+        "/cancel_listing": lambda: shop.cancel_listing_command(synthetic, db),
         "/warn": lambda: moderation.warn(synthetic, bot, db, owner_ids),
         "/warnings": lambda: moderation.warnings(synthetic, bot, db, owner_ids),
         "/clearwarns": lambda: moderation.clearwarns(synthetic, bot, db, owner_ids),
