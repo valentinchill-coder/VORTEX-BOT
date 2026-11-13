@@ -19,9 +19,21 @@ class Database:
                     user_id INTEGER NOT NULL,
                     admin_id INTEGER NOT NULL,
                     reason TEXT NOT NULL,
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT,
+                    revoked_at TEXT
                 )
             """)
+            warning_columns = {
+                row[1] for row in await (await db.execute("PRAGMA table_info(warnings)")).fetchall()
+            }
+            if "expires_at" not in warning_columns:
+                await db.execute("ALTER TABLE warnings ADD COLUMN expires_at TEXT")
+            if "revoked_at" not in warning_columns:
+                await db.execute("ALTER TABLE warnings ADD COLUMN revoked_at TEXT")
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_warnings_active ON warnings(chat_id,user_id,expires_at,revoked_at)"
+            )
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,15 +145,25 @@ class Database:
             async with aiosqlite.connect(destination) as target:
                 await source.backup(target)
 
-    async def add_warning(self, chat_id: int, user_id: int, admin_id: int, reason: str) -> int:
+    async def add_warning(self, chat_id: int, user_id: int, admin_id: int, reason: str,
+                          expires_in_days: int = 30) -> int:
+        if expires_in_days < 1 or expires_in_days > 365:
+            raise ValueError("Warning expiry must be between 1 and 365 days.")
+        now = datetime.now(timezone.utc)
+        created_at = now.isoformat()
+        expires_at = (now + timedelta(days=expires_in_days)).isoformat()
         async with aiosqlite.connect(self.path) as db:
             await db.execute(
-                "INSERT INTO warnings(chat_id,user_id,admin_id,reason,created_at) VALUES(?,?,?,?,?)",
-                (chat_id, user_id, admin_id, reason, _now()),
+                """INSERT INTO warnings(
+                    chat_id,user_id,admin_id,reason,created_at,expires_at
+                ) VALUES(?,?,?,?,?,?)""",
+                (chat_id, user_id, admin_id, reason[:500], created_at, expires_at),
             )
             cursor = await db.execute(
-                "SELECT COUNT(*) FROM warnings WHERE chat_id=? AND user_id=?",
-                (chat_id, user_id),
+                """SELECT COUNT(*) FROM warnings
+                   WHERE chat_id=? AND user_id=? AND revoked_at IS NULL
+                   AND (expires_at IS NULL OR expires_at>?)""",
+                (chat_id, user_id, created_at),
             )
             count = (await cursor.fetchone())[0]
             await db.commit()
@@ -150,8 +172,10 @@ class Database:
     async def warning_count(self, chat_id: int, user_id: int) -> int:
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute(
-                "SELECT COUNT(*) FROM warnings WHERE chat_id=? AND user_id=?",
-                (chat_id, user_id),
+                """SELECT COUNT(*) FROM warnings
+                   WHERE chat_id=? AND user_id=? AND revoked_at IS NULL
+                   AND (expires_at IS NULL OR expires_at>?)""",
+                (chat_id, user_id, _now()),
             )
             return int((await cursor.fetchone())[0])
 
@@ -160,7 +184,7 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
-                """SELECT admin_id,reason,created_at FROM warnings
+                """SELECT admin_id,reason,created_at,expires_at,revoked_at FROM warnings
                    WHERE chat_id=? AND user_id=?
                    ORDER BY id DESC LIMIT ?""",
                 (chat_id, user_id, limit),
@@ -169,7 +193,12 @@ class Database:
 
     async def clear_warnings(self, chat_id: int, user_id: int) -> None:
         async with aiosqlite.connect(self.path) as db:
-            await db.execute("DELETE FROM warnings WHERE chat_id=? AND user_id=?", (chat_id, user_id))
+            await db.execute(
+                """UPDATE warnings SET revoked_at=?
+                   WHERE chat_id=? AND user_id=? AND revoked_at IS NULL
+                   AND (expires_at IS NULL OR expires_at>?)""",
+                (_now(), chat_id, user_id, _now()),
+            )
             await db.commit()
 
     async def log_event(self, chat_id: int, event_type: str) -> None:
@@ -248,8 +277,9 @@ class Database:
             )
             rep = (await rep_cursor.fetchone())[0]
             warn_cursor = await db.execute(
-                "SELECT COUNT(*) FROM warnings WHERE chat_id=? AND user_id=?",
-                (chat_id, user_id),
+                """SELECT COUNT(*) FROM warnings WHERE chat_id=? AND user_id=?
+                   AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>?)""",
+                (chat_id, user_id, _now()),
             )
             warns = (await warn_cursor.fetchone())[0]
             return {
@@ -325,7 +355,8 @@ class Database:
             )
             users, messages = await cursor.fetchone()
             warnings = await db.execute(
-                "SELECT COUNT(*) FROM warnings WHERE chat_id=?", (chat_id,)
+                """SELECT COUNT(*) FROM warnings WHERE chat_id=? AND revoked_at IS NULL
+                   AND (expires_at IS NULL OR expires_at>?)""", (chat_id, _now())
             )
             warning_count = (await warnings.fetchone())[0]
             flood = await db.execute(
