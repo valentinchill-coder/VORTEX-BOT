@@ -96,3 +96,41 @@ async def top_money_command(message: Message, db: Database):
             name = f"Участник {user_id}"
         lines.append(f"{index}. {name} — <b>{balance}</b> V-coins")
     await message.answer("\n".join(lines))
+
+
+@router.message(Command("exchange"))
+async def exchange_command(message: Message, db: Database):
+    if message.chat.type == ChatType.PRIVATE:
+        await message.answer("Обмен игровых очков на V-coins доступен только в группе.")
+        return
+    if not message.from_user:
+        return
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer(
+            "Укажи количество игровых очков: /exchange 100\\n"
+            "Курс: 10 игровых очков = 1 V-coin. Сумма должна быть кратна 10."
+        )
+        return
+    points = int(parts[1])
+    if points < 10 or points > 1_000_000:
+        await message.answer("Можно обменять от 10 до 1 000 000 игровых очков за раз.")
+        return
+    if points % 10:
+        await message.answer("Количество очков должно быть кратно 10. Например: /exchange 100")
+        return
+    success, remaining_points, balance, coins = await db.exchange_game_points(
+        message.chat.id, message.from_user.id, points, rate=10
+    )
+    if not success:
+        await message.answer(
+            f"Недостаточно игровых очков. Сейчас у тебя: <b>{remaining_points}</b>."
+        )
+        return
+    await message.answer(
+        f"💱 Обмен выполнен!\\n"
+        f"Списано: <b>{points}</b> игровых очков\\n"
+        f"Начислено: <b>+{coins} V-coins</b>\\n"
+        f"Остаток игровых очков: <b>{remaining_points}</b>\\n"
+        f"Баланс: <b>{balance} V-coins</b>"
+    )
