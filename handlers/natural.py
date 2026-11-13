@@ -56,6 +56,9 @@ def parse_intent(text: str) -> str | None:
     if re.search(r"\b(выдать ранг|назначить ранг|поставить ранг)\b", value):
         return "__rank_usage__"
 
+    if re.search(r"\\b(мои достижения|покажи достижения|список достижений)\\b", value):
+        return "/achievements"
+
     # Read-only information and navigation.
     if re.search(r"\b(баланс|сколько у меня (?:монет|денег)|покажи (?:мои )?монеты)\b", value):
         return "/balance"
@@ -165,6 +168,7 @@ async def _dispatch(message: Message, command_text: str, db: Database, bot, owne
         "/topmoney": lambda: economy.top_money_command(synthetic, db),
         "/exchange": lambda: economy.exchange_command(synthetic, db),
         "/profile": lambda: profile.profile_command(synthetic, db, owner_ids),
+        "/achievements": lambda: profile.achievements_command(synthetic, db),
         "/rep": lambda: profile.reputation_command(synthetic, db),
         "/toprep": lambda: profile.top_reputation_command(synthetic, db),
         "/topactivity": lambda: profile.top_activity_command(synthetic, db),
