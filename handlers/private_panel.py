@@ -31,6 +31,7 @@ async def _safe_query_answer(query: CallbackQuery, *args, **kwargs) -> None:
             raise
 
 pending_action: dict[int, tuple[int, str]] = {}
+pending_filter_input: dict[int, int] = {}
 
 
 async def allowed(bot: Bot, user_id: int, chat_id: int, owner_ids: frozenset[int]) -> bool:
@@ -64,6 +65,7 @@ def group_keyboard(chat_id: int):
     kb.button(text="🛡 Модерация", callback_data=f"vp:mod:{chat_id}")
     kb.button(text="⚙️ Настройки защиты", callback_data=f"vp:settings:{chat_id}")
     kb.button(text="📋 Журнал действий", callback_data=f"vp:audit:{chat_id}")
+    kb.button(text="🚫 Фильтры сообщений", callback_data=f"vp:filters:{chat_id}")
     kb.button(text="🔄 Обновить", callback_data=f"vp:group:{chat_id}")
     kb.button(text="⬅️ К списку групп", callback_data="vp:groups")
     kb.adjust(1)
@@ -172,6 +174,7 @@ async def private_start(message: Message, bot: Bot, db: Database, owner_ids: fro
     if not message.from_user:
         return
     pending_action.pop(message.from_user.id, None)
+    pending_filter_input.pop(message.from_user.id, None)
     groups = []
     for chat_id in await known_groups(db):
         if not await allowed(bot, message.from_user.id, chat_id, owner_ids):
@@ -386,6 +389,7 @@ async def choose_action(query: CallbackQuery, bot: Bot, owner_ids: frozenset[int
 async def cancel_action(message: Message):
     if message.from_user:
         pending_action.pop(message.from_user.id, None)
+        pending_filter_input.pop(message.from_user.id, None)
     await message.answer("Действие отменено.")
 
 
@@ -565,3 +569,124 @@ async def group_audit_log(query: CallbackQuery, bot: Bot, db: Database, owner_id
     kb.adjust(1)
     await _safe_edit(query.message, "\n".join(lines), reply_markup=kb.as_markup())
     await _safe_query_answer(query)
+
+
+async def _render_filters(query: CallbackQuery, chat_id: int, db: Database, bot: Bot, owner_ids: frozenset[int]):
+    if not query.message or not query.from_user or query.message.chat.type != "private":
+        await _safe_query_answer(query)
+        return
+    if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+        await _safe_query_answer(query, "Доступ запрещён.", show_alert=True)
+        return
+    settings = await db.get_chat_settings(chat_id)
+    words = await db.list_blocked_words(chat_id)
+    kb = InlineKeyboardBuilder()
+    kb.button(text=f"Фильтр ссылок: {'ВКЛ' if settings['link_filter_enabled']=='1' else 'ВЫКЛ'}", callback_data=f"vp:filtertoggle:{chat_id}:link_filter_enabled")
+    kb.button(text=f"Запрещённые слова: {'ВКЛ' if settings['word_filter_enabled']=='1' else 'ВЫКЛ'}", callback_data=f"vp:filtertoggle:{chat_id}:word_filter_enabled")
+    kb.button(text="➕ Добавить слово/фразу", callback_data=f"vp:filteradd:{chat_id}")
+    for word in words[:12]:
+        kb.button(text=f"❌ {word[:28]}", callback_data=f"vp:filterremove:{chat_id}:{word}")
+    kb.button(text="⬅️ Назад", callback_data=f"vp:group:{chat_id}")
+    kb.adjust(1)
+    word_text = "\n".join(f"• {escape(w)}" for w in words) if words else "Список пуст."
+    await _safe_edit(query.message,
+        "🚫 <b>Фильтры сообщений</b>\n\n"
+        f"Ссылки: <b>{'включены' if settings['link_filter_enabled']=='1' else 'выключены'}</b>\n"
+        f"Запрещённые слова: <b>{'включены' if settings['word_filter_enabled']=='1' else 'выключены'}</b>\n\n"
+        f"<b>Список слов и фраз:</b>\n{word_text}\n\n"
+        "Добавляй короткие слова или фразы (до 32 символов). Удаление фильтрует только новые сообщения.",
+        reply_markup=kb.as_markup(),
+    )
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:filters:"))
+async def show_filters(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    try:
+        chat_id = int(query.data.rsplit(":", 1)[1])
+    except (ValueError, IndexError):
+        await _safe_query_answer(query, "Некорректная группа.", show_alert=True)
+        return
+    await _render_filters(query, chat_id, db, bot, owner_ids)
+    await _safe_query_answer(query)
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:filtertoggle:"))
+async def toggle_filter(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not query.from_user or not query.message or query.message.chat.type != "private":
+        await _safe_query_answer(query)
+        return
+    parts = query.data.split(":")
+    if len(parts) != 4:
+        await _safe_query_answer(query, "Некорректная настройка.", show_alert=True)
+        return
+    try:
+        chat_id = int(parts[2])
+    except ValueError:
+        await _safe_query_answer(query, "Некорректная группа.", show_alert=True)
+        return
+    key = parts[3]
+    if key not in {"link_filter_enabled", "word_filter_enabled"} or not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+        await _safe_query_answer(query, "Нет доступа или неверная настройка.", show_alert=True)
+        return
+    current = (await db.get_chat_settings(chat_id))[key]
+    await db.set_chat_setting(chat_id, key, "0" if current == "1" else "1", query.from_user.id)
+    await _render_filters(query, chat_id, db, bot, owner_ids)
+    await _safe_query_answer(query, "Настройка сохранена.")
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:filteradd:"))
+async def start_add_filter_word(query: CallbackQuery, bot: Bot, owner_ids: frozenset[int]):
+    if not query.from_user or not query.message or query.message.chat.type != "private":
+        await _safe_query_answer(query)
+        return
+    try:
+        chat_id = int(query.data.rsplit(":", 1)[1])
+    except ValueError:
+        await _safe_query_answer(query, "Некорректная группа.", show_alert=True)
+        return
+    if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+        await _safe_query_answer(query, "Доступ запрещён.", show_alert=True)
+        return
+    pending_filter_input[query.from_user.id] = chat_id
+    await query.message.answer("Отправь слово или короткую фразу (до 32 символов, максимум 3 слова). Для отмены — /cancel.")
+    await _safe_query_answer(query)
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:filterremove:"))
+async def remove_filter_word(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not query.from_user or not query.message or query.message.chat.type != "private":
+        await _safe_query_answer(query)
+        return
+    parts = query.data.split(":", 3)
+    if len(parts) != 4:
+        await _safe_query_answer(query, "Некорректное слово.", show_alert=True)
+        return
+    try:
+        chat_id = int(parts[2])
+    except ValueError:
+        await _safe_query_answer(query, "Некорректная группа.", show_alert=True)
+        return
+    if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+        await _safe_query_answer(query, "Доступ запрещён.", show_alert=True)
+        return
+    await db.remove_blocked_word(chat_id, parts[3])
+    await _render_filters(query, chat_id, db, bot, owner_ids)
+    await _safe_query_answer(query, "Слово удалено из списка.")
+
+@router.message(lambda m: m.chat.type == "private" and m.from_user and m.from_user.id in pending_filter_input and not (m.text or "").startswith("/"))
+async def save_filter_word(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not message.from_user:
+        return
+    chat_id = pending_filter_input.get(message.from_user.id)
+    if chat_id is None:
+        return
+    if not await allowed(bot, message.from_user.id, chat_id, owner_ids):
+        pending_filter_input.pop(message.from_user.id, None)
+        await message.answer("Доступ отозван. Добавление отменено.")
+        return
+    word = (message.text or "").strip()
+    try:
+        if not word:
+            raise ValueError()
+        added = await db.add_blocked_word(chat_id, word, message.from_user.id)
+    except ValueError:
+        await message.answer("Не подходит: используй 1–32 символа и не более 3 слов.")
+        return
+    pending_filter_input.pop(message.from_user.id, None)
+    await message.answer("Фраза добавлена в список." if added else "Такая фраза уже есть.")
