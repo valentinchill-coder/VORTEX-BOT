@@ -1,4 +1,5 @@
 import re
+from html import escape
 from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot, Router
@@ -54,7 +55,7 @@ async def warn(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
     reason = (message.text or "").partition(" ")[2].strip() or "Причина не указана"
     count = await db.add_warning(message.chat.id, target.id, message.from_user.id, reason)
     await db.log_event(message.chat.id, "warn")
-    await message.answer(f"⚠️ {target.full_name}: предупреждение {count}. Причина: {reason}")
+    await message.answer(f"⚠️ {escape(target.full_name)}: предупреждение {count}. Причина: {escape(reason)}")
 
 
 @router.message(Command("warnings"))
@@ -64,7 +65,7 @@ async def warnings(message: Message, bot: Bot, db: Database, owner_ids: frozense
     target = await target_from_reply(message)
     if target:
         count = await db.warning_count(message.chat.id, target.id)
-        await message.answer(f"У {target.full_name} предупреждений: {count}.")
+        await message.answer(f"У {escape(target.full_name)} предупреждений: {count}.")
 
 
 @router.message(Command("clearwarns"))
@@ -74,7 +75,7 @@ async def clearwarns(message: Message, bot: Bot, db: Database, owner_ids: frozen
     target = await target_from_reply(message)
     if target:
         await db.clear_warnings(message.chat.id, target.id)
-        await message.answer(f"Предупреждения пользователя {target.full_name} очищены.")
+        await message.answer(f"Предупреждения пользователя {escape(target.full_name)} очищены.")
 
 
 def parse_duration(value: str) -> timedelta | None:
@@ -111,7 +112,7 @@ async def mute(message: Message, bot: Bot, owner_ids: frozenset[int]):
             permissions=ChatPermissions(can_send_messages=False),
             until_date=until,
         )
-        await message.answer(f"🔇 {target.full_name} ограничен на {parts[1] if len(parts) > 1 else '10m'}.")
+        await message.answer(f"🔇 {escape(target.full_name)} ограничен на {escape(parts[1]) if len(parts) > 1 else '10m'}.")
     except TelegramBadRequest as exc:
         await message.answer(f"Не удалось ограничить пользователя: {exc.message}")
 
@@ -140,7 +141,7 @@ async def unmute(message: Message, bot: Bot, owner_ids: frozenset[int]):
                 can_add_web_page_previews=True,
             ),
         )
-        await message.answer(f"🔊 Ограничения сняты: {target.full_name}.")
+        await message.answer(f"🔊 Ограничения сняты: {escape(target.full_name)}.")
     except TelegramBadRequest as exc:
         await message.answer(f"Не удалось снять ограничения: {exc.message}")
 
@@ -155,7 +156,7 @@ async def kick(message: Message, bot: Bot, owner_ids: frozenset[int]):
     try:
         await bot.ban_chat_member(message.chat.id, target.id)
         await bot.unban_chat_member(message.chat.id, target.id, only_if_banned=True)
-        await message.answer(f"👢 {target.full_name} удалён из группы.")
+        await message.answer(f"👢 {escape(target.full_name)} удалён из группы.")
     except TelegramBadRequest as exc:
         await message.answer(f"Не удалось удалить пользователя: {exc.message}")
 
@@ -169,7 +170,7 @@ async def ban(message: Message, bot: Bot, owner_ids: frozenset[int]):
         return
     try:
         await bot.ban_chat_member(message.chat.id, target.id)
-        await message.answer(f"⛔ {target.full_name} заблокирован.")
+        await message.answer(f"⛔ {escape(target.full_name)} заблокирован.")
     except TelegramBadRequest as exc:
         await message.answer(f"Не удалось заблокировать пользователя: {exc.message}")
 
