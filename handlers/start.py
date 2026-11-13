@@ -23,9 +23,11 @@ def main_menu():
     keyboard.button(text="⚠️ Предупреждения", callback_data="vortex:warnings")
     keyboard.button(text="🚫 Антифлуд", callback_data="vortex:antiflood")
     keyboard.button(text="📊 Статистика", callback_data="vortex:stats")
+    keyboard.button(text="👤 Профиль", callback_data="vortex:profile")
+    keyboard.button(text="⭐ Репутация", callback_data="vortex:reputation")
     keyboard.button(text="👋 Приветствие", callback_data="vortex:welcome")
     keyboard.button(text="📖 Все команды", callback_data="vortex:commands")
-    keyboard.adjust(2, 2, 2, 1)
+    keyboard.adjust(2, 2, 2, 2, 1)
     return keyboard.as_markup()
 
 
@@ -77,7 +79,7 @@ MENU_TEXT = {
         "Отправь команду /stats в группе, чтобы посмотреть количество "
         "предупреждений, выданных ботом."
     ),
-    "welcome": (
+    "profile": (\n        "👤 <b>Профили участников</b>\\n\\n"\n        "/profile — посмотреть свой профиль\\n"\n        "Ответь командой /profile на сообщение, чтобы посмотреть профиль другого участника."\n    ),\n    "reputation": (\n        "⭐ <b>Репутация</b>\\n\\n"\n        "Ответь командой /rep на сообщение, чтобы выдать +1 репутации.\\n"\n        "/toprep — рейтинг участников. Повторно выдать репутацию одному человеку можно на следующий день."\n    ),\n    "welcome": (
         "👋 <b>Приветствие</b>\n\n"
         "Бот автоматически приветствует новых участников, когда они вступают в группу."
     ),
@@ -92,7 +94,7 @@ MENU_TEXT = {
         "/kick — удалить из группы (ответом)\n"
         "/ban — заблокировать (ответом)\n"
         "/unban ID — разблокировать по Telegram ID\n"
-        "/stats — статистика группы"
+        "/profile — профиль участника\\n"\n        "/rep — выдать репутацию (ответом)\\n"\n        "/toprep — топ репутации\\n"\n        "/stats — статистика группы"
     ),
 }
 
