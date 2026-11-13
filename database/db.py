@@ -155,6 +155,18 @@ class Database:
             )
             return int((await cursor.fetchone())[0])
 
+    async def recent_warnings(self, chat_id: int, user_id: int, limit: int = 5) -> list[dict]:
+        limit = max(1, min(int(limit), 20))
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT admin_id,reason,created_at FROM warnings
+                   WHERE chat_id=? AND user_id=?
+                   ORDER BY id DESC LIMIT ?""",
+                (chat_id, user_id, limit),
+            )
+            return [dict(row) for row in await cursor.fetchall()]
+
     async def clear_warnings(self, chat_id: int, user_id: int) -> None:
         async with aiosqlite.connect(self.path) as db:
             await db.execute("DELETE FROM warnings WHERE chat_id=? AND user_id=?", (chat_id, user_id))
