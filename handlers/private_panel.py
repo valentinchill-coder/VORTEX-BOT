@@ -784,7 +784,21 @@ async def _render_rank_panel(query: CallbackQuery, chat_id: int, bot: Bot, db: D
     async with aiosqlite.connect(db.path) as conn:
         cur = await conn.execute("SELECT user_id, rank FROM moderation_ranks WHERE chat_id=? ORDER BY rank DESC, updated_at DESC LIMIT 30", (chat_id,))
         assigned = await cur.fetchall()
-    lines = ["👑 <b>Ранги модераторов</b>", "", "Назначенные ранги:"]
+    lines = [
+        "👑 <b>Ранги модераторов VORTEX</b>",
+        "",
+        "<b>Описание рангов:</b>",
+        "0. Участник — без прав модерации.",
+        "1. Стажёр — просмотр предупреждений и наблюдение.",
+        "2. Младший модератор — выдача предупреждений и просмотр истории.",
+        "3. Модератор — предупреждения, мут и снятие мута.",
+        "4. Старший модератор — права модератора, исключение и бан.",
+        "5. Главный модератор — управление младшими рангами и аудит.",
+        "6. Администратор — полный доступ к модерации (назначается Telegram).",
+        "7. Владелец VORTEX — полные права владельца бота.",
+        "",
+        "<b>Назначенные ранги:</b>",
+    ]
     if assigned:
         for uid, rank in assigned:
             try:
