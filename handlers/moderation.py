@@ -101,7 +101,21 @@ async def warnings(message: Message, bot: Bot, db: Database, owner_ids: frozense
     target = await target_from_reply(message)
     if target:
         count = await db.warning_count(message.chat.id, target.id)
-        await message.answer(f"У {escape(target.full_name)} предупреждений: {count}.")
+        rows = await db.recent_warnings(message.chat.id, target.id, limit=5)
+        lines = [
+            f"⚠️ <b>Предупреждения: {escape(target.full_name)}</b>",
+            f"Всего активных предупреждений: <b>{count}</b>",
+        ]
+        if rows:
+            lines.append("")
+            lines.append("<b>Последние предупреждения:</b>")
+            for row in rows:
+                created = escape(row["created_at"][:16].replace("T", " "))
+                reason = escape(row["reason"])
+                lines.append(f"• <code>{created}</code> — {reason} (модератор ID: <code>{row['admin_id']}</code>)")
+        else:
+            lines.append("Нарушений не зафиксировано.")
+        await message.answer("\n".join(lines))
 
 
 @router.message(Command("clearwarns"))
