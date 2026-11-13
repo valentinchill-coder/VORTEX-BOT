@@ -17,6 +17,9 @@ class NaturalLanguageIntentTests(unittest.TestCase):
     def test_game_specific_request_precedes_generic_game_menu(self):
         self.assertEqual(parse_intent("Начни игру угадай число"), "__game_guess__")
 
+    def test_cancel_market_listing(self):
+        self.assertEqual(parse_intent("Сними свой лот 12"), "/cancel_listing 12")
+
     def test_transfer(self):
         self.assertEqual(parse_intent("Переведи 50 монет"), "/pay 50")
 
