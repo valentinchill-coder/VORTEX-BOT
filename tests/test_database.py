@@ -1,8 +1,11 @@
 import tempfile
 import unittest
+
+import aiosqlite
 from pathlib import Path
 
 from database.db import Database
+from handlers.shop import initialize_shop
 
 
 class DatabaseTests(unittest.IsolatedAsyncioTestCase):
@@ -10,6 +13,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.db = Database(str(Path(self.temp_dir.name) / "test.db"))
         await self.db.connect()
+        await initialize_shop(self.db)
 
     async def asyncTearDown(self):
         self.temp_dir.cleanup()
@@ -33,6 +37,28 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         profile = await backup_db.get_profile(-1001, 77)
         self.assertEqual(profile["user"]["full_name"], "Backup User")
         self.assertEqual(profile["user"]["message_count"], 1)
+
+    async def test_achievement_stats_aggregate_group_progress(self):
+        await self.db.register_message(-1001, 10, "tester", "Test User")
+        await self.db.register_message(-1001, 10, "tester", "Test User")
+        await self.db.give_reputation(-1001, 10, 11)
+        await self.db.add_game_result(-1001, 10, 5, True)
+        await self.db.claim_daily(-1001, 10)
+        async with aiosqlite.connect(self.db.path) as conn:
+            await conn.execute(
+                "INSERT INTO user_items(chat_id,user_id,item_code,quantity) VALUES(?,?,?,?)",
+                (-1001, 10, "rose", 3),
+            )
+            await conn.commit()
+        stats = await self.db.achievement_stats(-1001, 10)
+        self.assertEqual(stats, {
+            "messages": 2,
+            "reputation": 1,
+            "wins": 1,
+            "played": 1,
+            "items": 3,
+            "balance": 100,
+        })
 
     async def test_activity_profile_and_stats(self):
         await self.db.register_message(-1001, 10, "tester", "Test User")
