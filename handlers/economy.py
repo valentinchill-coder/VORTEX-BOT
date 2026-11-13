@@ -201,6 +201,14 @@ async def economy_button_callback(query: CallbackQuery, db: Database):
         return
     await query.answer()
 
+@router.message(Command("cancel"), lambda m: m.from_user is not None and m.chat.type != ChatType.PRIVATE
+                and (m.chat.id, m.from_user.id) in _economy_pending)
+async def cancel_economy_action(message: Message):
+    if message.from_user:
+        _economy_pending.pop((message.chat.id, message.from_user.id), None)
+    await message.answer("Операция с экономикой отменена.")
+
+
 @router.message(lambda m: m.from_user is not None and m.chat.type != ChatType.PRIVATE
                 and (m.chat.id, m.from_user.id) in _economy_pending
                 and not (m.text or "").startswith("/"))
