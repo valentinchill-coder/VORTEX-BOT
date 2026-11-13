@@ -313,6 +313,49 @@ class Database:
             await db.commit()
             return int(row[0]), int(row[1]), int(row[2])
 
+    async def exchange_game_points(
+        self, chat_id: int, user_id: int, points_to_exchange: int, rate: int = 10
+    ) -> tuple[bool, int, int, int]:
+        """Atomically convert game points to V-coins (rate game points per coin)."""
+        if points_to_exchange <= 0 or rate <= 0 or points_to_exchange % rate != 0:
+            return False, 0, 0, 0
+        coins = points_to_exchange // rate
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("BEGIN IMMEDIATE")
+            cursor = await db.execute(
+                "SELECT points FROM game_stats WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            row = await cursor.fetchone()
+            current_points = int(row[0]) if row else 0
+            if current_points < points_to_exchange:
+                balance_cursor = await db.execute(
+                    "SELECT balance FROM wallets WHERE chat_id=? AND user_id=?",
+                    (chat_id, user_id),
+                )
+                balance_row = await balance_cursor.fetchone()
+                balance = int(balance_row[0]) if balance_row else 0
+                await db.commit()
+                return False, current_points, balance, 0
+
+            await db.execute(
+                "UPDATE game_stats SET points=points-? WHERE chat_id=? AND user_id=?",
+                (points_to_exchange, chat_id, user_id),
+            )
+            await db.execute("""
+                INSERT INTO wallets(chat_id,user_id,balance)
+                VALUES(?,?,?)
+                ON CONFLICT(chat_id,user_id) DO UPDATE SET
+                    balance=wallets.balance+excluded.balance
+            """, (chat_id, user_id, coins))
+            balance_cursor = await db.execute(
+                "SELECT balance FROM wallets WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            balance = int((await balance_cursor.fetchone())[0])
+            await db.commit()
+            return True, current_points - points_to_exchange, balance, coins
+
     async def top_games(self, chat_id: int, limit: int = 10) -> list[tuple[int, int, int, int]]:
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute("""
