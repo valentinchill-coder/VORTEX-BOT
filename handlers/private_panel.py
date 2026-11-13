@@ -494,11 +494,13 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
             result = f"🔇 Участник ограничен на {duration_label}."
             details = f"{duration_label}; личная панель"
         elif action == "unmute":
-            chat_info = await bot.get_chat(chat_id)
-            await bot.restrict_chat_member(chat_id, user_id, permissions=chat_info.permissions or ChatPermissions(
+            # Do not reapply chat-wide defaults here: they may include
+            # can_send_messages=False and keep the selected member muted.
+            await bot.restrict_chat_member(chat_id, user_id, permissions=ChatPermissions(
                 can_send_messages=True, can_send_audios=True, can_send_documents=True, can_send_photos=True,
                 can_send_videos=True, can_send_video_notes=True, can_send_voice_notes=True, can_send_polls=True,
-                can_send_other_messages=True, can_add_web_page_previews=True, can_manage_topics=False))
+                can_send_other_messages=True, can_add_web_page_previews=True, can_manage_topics=False),
+                use_independent_chat_permissions=True)
             result = "🔊 Ограничения сняты."
             details = "Личная панель"
         elif action == "kick":
