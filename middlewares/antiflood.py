@@ -23,10 +23,7 @@ class AntiFloodMiddleware(BaseMiddleware):
             or event.from_user.is_bot
             or event.chat.type == ChatType.PRIVATE
         ):
-            return await handler(event, data)
-
-        db = data.get("db")
-        if db:
+            if db:
             try:
                 await db.register_message(
                     event.chat.id,
@@ -37,6 +34,10 @@ class AntiFloodMiddleware(BaseMiddleware):
             except Exception:
                 # Activity tracking must never block normal group messages.
                 pass
+
+        return await handler(event, data)
+
+        db = data.get("db")
 
         key = (event.chat.id, event.from_user.id)
         now = time.monotonic()
