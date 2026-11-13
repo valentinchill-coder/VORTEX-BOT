@@ -474,7 +474,11 @@ async def menu_callback(query: CallbackQuery, db: Database):
         await query.answer()
         return
     if query.message.chat.type == "private":
-        if section == "shop":
+        if section == "home":
+            await _safe_edit(query.message,
+                "🌪 <b>VORTEX BOT</b>\\nТвой помощник по управлению Telegram-группой.\\n\\nВыбери нужный раздел:",
+                reply_markup=main_menu())
+        elif section == "shop":
             await _safe_edit(query.message,
                 "🎒 <b>Предметы VORTEX</b>\n\n"
                 "Здесь можно изучить каталог, цены, эффекты и правила использования. "
