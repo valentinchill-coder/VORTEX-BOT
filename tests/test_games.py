@@ -1,6 +1,6 @@
 import unittest
 
-from handlers.games import _QUIZ, GUESS_ATTEMPTS, GUESS_MAX, GUESS_MIN
+from handlers.games import _QUIZ, _select_quiz_options, GUESS_ATTEMPTS, GUESS_MAX, GUESS_MIN
 
 
 class GameBalanceTests(unittest.TestCase):
@@ -9,6 +9,16 @@ class GameBalanceTests(unittest.TestCase):
         # With 63 equally likely targets, the optimal theoretical chance is 31/63.
         self.assertEqual((GUESS_MIN, GUESS_MAX, GUESS_ATTEMPTS), (1, 63, 5))
         self.assertAlmostEqual(31 / 63, 0.49206349, places=6)
+
+    def test_quiz_displays_two_options_and_correct_index(self):
+        for question, options, correct_index in _QUIZ:
+            original = list(options)
+            displayed, answer_index = _select_quiz_options(options, correct_index)
+            with self.subTest(question=question):
+                self.assertEqual(len(displayed), 2)
+                self.assertEqual(len(set(displayed)), 2)
+                self.assertEqual(displayed[answer_index], options[correct_index])
+                self.assertEqual(options, original)
 
     def test_quiz_questions_have_four_distinct_options_and_valid_answer(self):
         for question, options, correct_index in _QUIZ:
