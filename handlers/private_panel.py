@@ -720,7 +720,6 @@ async def _render_rank_panel(query: CallbackQuery, chat_id: int, bot: Bot, db: D
         return
     actor_rank = await _rank_actor_level(bot, query.from_user.id, chat_id, owner_ids, db)
     if actor_rank < 5:
-        await _safe_query_answer(query, "Управлять рангами может главный модератор или администратор группы.", show_alert=True)
         return
     async with aiosqlite.connect(db.path) as conn:
         cur = await conn.execute("SELECT user_id, rank FROM moderation_ranks WHERE chat_id=? ORDER BY rank DESC, updated_at DESC LIMIT 30", (chat_id,))
@@ -750,6 +749,9 @@ async def show_rank_panel(query: CallbackQuery, bot: Bot, db: Database, owner_id
         chat_id = int(query.data.rsplit(":", 1)[1])
     except (ValueError, IndexError):
         await _safe_query_answer(query, "Некорректная группа.", show_alert=True)
+        return
+    if await _rank_actor_level(bot, query.from_user.id, chat_id, owner_ids, db) < 5:
+        await _safe_query_answer(query, "Управлять рангами может главный модератор или администратор группы.", show_alert=True)
         return
     await _render_rank_panel(query, chat_id, bot, db, owner_ids)
     await _safe_query_answer(query)
