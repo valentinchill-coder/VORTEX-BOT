@@ -406,6 +406,7 @@ async def member_action_callback(
         else:
             await query.answer("Неизвестное действие.", show_alert=True)
             return
+        await db.log_moderation_action(chat_id, query.from_user.id, user_id, action, "через меню")
         await query.message.answer(result)
         await query.answer("Готово.")
     except TelegramAPIError as exc:
