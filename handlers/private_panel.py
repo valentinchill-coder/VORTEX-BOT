@@ -377,7 +377,7 @@ async def cancel_action(message: Message):
     await message.answer("Действие отменено.")
 
 
-@router.message(lambda m: m.chat.type == "private" and m.from_user and m.from_user.id in pending_action)
+@router.message(lambda m: m.chat.type == "private" and m.from_user and m.from_user.id in pending_action and not (m.text or "").startswith("/"))
 async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not message.from_user:
         return
