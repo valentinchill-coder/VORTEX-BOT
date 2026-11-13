@@ -79,6 +79,16 @@ def back_menu():
     keyboard.button(text="⬅️ В главное меню", callback_data="vortex:home")
     return keyboard.as_markup()
 
+def private_shop_menu():
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="🛍 Каталог и цены", callback_data="shopinfo:catalog")
+    keyboard.button(text="✨ Эффекты предметов", callback_data="shopinfo:effects")
+    keyboard.button(text="📦 Как получить и использовать", callback_data="shopinfo:howto")
+    keyboard.button(text="⬅️ В главное меню", callback_data="shopinfo:home")
+    keyboard.adjust(1)
+    return keyboard.as_markup()
+
+
 def economy_section_keyboard():
     keyboard = InlineKeyboardBuilder()
     keyboard.button(text="💰 Мой баланс", callback_data="eco:balance")
@@ -418,6 +428,45 @@ async def member_action_callback(
         await query.answer(f"Не удалось выполнить действие: {exc.message}", show_alert=True)
 
 
+@router.callback_query(lambda query: query.data and query.data.startswith("shopinfo:"))
+async def private_shop_info_callback(query: CallbackQuery):
+    if not query.message or query.message.chat.type != "private":
+        await query.answer("Открой этот раздел в личном чате с ботом.", show_alert=True)
+        return
+    section = query.data.split(":", 1)[1]
+    if section == "home":
+        await _safe_edit(query.message, "🌪 <b>VORTEX BOT</b>\\nТвой помощник по управлению Telegram-группой.", reply_markup=main_menu())
+    elif section in ("catalog", "effects"):
+        from handlers.shop import ITEMS
+        heading = "🛍 <b>Каталог предметов VORTEX</b>" if section == "catalog" else "✨ <b>Эффекты предметов</b>"
+        lines = [heading, ""]
+        for code, item in ITEMS.items():
+            lines.append(f"{item['name']} — <b>{item['price']:,} V-coins</b>")
+            lines.append(f"<code>{code}</code> · {item['description']}")
+            lines.append("")
+        if section == "effects":
+            lines.append("Важно: сейчас предметы дают только указанные игровые очки. Дополнительные бонусы не активированы.")
+        else:
+            lines.append("Цены указаны за 1 предмет. Покупка доступна в группе: /buyitem rose 1.")
+        await _safe_edit(query.message, "\\n".join(lines), reply_markup=private_shop_menu())
+    elif section == "howto":
+        await _safe_edit(query.message,
+            "📦 <b>Как пользоваться предметами</b>\\n\\n"
+            "1. Получи V-coins за активность, игры и задания.\\n"
+            "2. В группе купи предмет: <code>/buyitem rose 2</code>.\\n"
+            "3. Проверь вещи: <code>/inventory</code>.\\n"
+            "4. Используй предмет: <code>/useitem rose</code> — он спишется, а игровые очки начислятся.\\n"
+            "5. Подари предмет ответом на сообщение: <code>/giftitem rose 1</code>.\\n"
+            "6. Выставь на рынок: <code>/sellitem rose 1 150</code>.\\n"
+            "7. Просмотри рынок: <code>/market</code>; купить лот: <code>/buylisting 12</code>.\\n\\n"
+            "Инвентарь и рынок ведутся отдельно для каждой группы. В личном чате доступна справка.",
+            reply_markup=private_shop_menu())
+    else:
+        await query.answer("Раздел не найден.", show_alert=True)
+        return
+    await query.answer()
+
+
 @router.callback_query(lambda query: query.data and query.data.startswith("vortex:"))
 async def menu_callback(query: CallbackQuery, db: Database):
     section = query.data.split(":", 1)[1]
@@ -425,7 +474,15 @@ async def menu_callback(query: CallbackQuery, db: Database):
         await query.answer()
         return
     if query.message.chat.type == "private":
-        await query.answer("Это меню работает в группе. В личном чате доступен просмотр своего профиля.", show_alert=True)
+        if section == "shop":
+            await _safe_edit(query.message,
+                "🎒 <b>Предметы VORTEX</b>\\n\\n"
+                "Посмотри каталог, цены и эффекты предметов. Покупка, использование, "
+                "подарки и торговля выполняются в группе, так как инвентарь привязан к группе.",
+                reply_markup=private_shop_menu())
+            await query.answer()
+            return
+        await query.answer("Этот раздел доступен в группе. В личном чате можно изучить предметы.", show_alert=True)
         return
     if section == "home":
         text = (
