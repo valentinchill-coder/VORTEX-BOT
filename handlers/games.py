@@ -50,10 +50,10 @@ async def _start_guess(chat_id: int, user_id: int, send):
         await send("У тебя уже идёт игра. Продолжай командой /guess число.")
         return
     number = random.randint(1, 100)
-    _guess_games[key] = {"number": number, "attempts": 7}
+    _guess_games[key] = {"number": number, "attempts": 6}
     await send(
         "🔢 <b>Угадай число!</b>\n\n"
-        "Я загадал число от 1 до 100. У тебя 7 попыток.\n"
+        "Я загадал число от 1 до 100. У тебя 6 попыток. Используй подсказки, чтобы сузить диапазон.\n"
         "Отправляй: <code>/guess 50</code>"
     )
 
