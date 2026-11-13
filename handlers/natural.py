@@ -144,7 +144,7 @@ def parse_intent(text: str) -> str | None:
         return "/warnings"
     if re.search(r"\b(очисти предупреждения|сбрось предупреждения)\b", value):
         return "/clearwarns"
-    if re.search(r"\b(сними мут|размути|размут|анмут|верни возможность писать)\b", value):
+    if re.search(r"\b(сними|снять|убери|убрать|отмени|отменить)\s+(?:мне\s+)?мут\w*\b|\b(размути|размут|анмут|верни возможность писать)\b", value):
         username = re.search(r"@([a-z0-9_]{5,32})", raw, re.I)
         return f"/unmute @{username.group(1)}" if username else "/unmute"
     if re.search(r"\b(замути|замутить|замуть|мут|mute|ограничь писать)\b", value):
