@@ -47,9 +47,9 @@ def games_menu():
 
 def shop_menu():
     keyboard = InlineKeyboardBuilder()
-    keyboard.button(text="🛍 Каталог магазина", callback_data="vortex:shop_catalog")
-    keyboard.button(text="🎒 Мой инвентарь", callback_data="vortex:shop_inventory")
-    keyboard.button(text="🏪 Рынок игроков", callback_data="vortex:shop_market")
+    keyboard.button(text="🛍 Каталог магазина", callback_data="shopui:catalog")
+    keyboard.button(text="🎒 Мой инвентарь", callback_data="shopui:inventory")
+    keyboard.button(text="🏪 Рынок игроков", callback_data="shopui:market")
     keyboard.button(text="⬅️ В главное меню", callback_data="vortex:home")
     keyboard.adjust(1)
     return keyboard.as_markup()
