@@ -1,0 +1,297 @@
+from datetime import datetime, timedelta, timezone
+from html import escape
+
+import aiosqlite
+from aiogram import Bot, Router
+from aiogram.enums import ChatMemberStatus
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import Command
+from aiogram.types import Message, CallbackQuery, ChatPermissions
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+from database.db import Database
+
+router = Router()
+pending_action: dict[int, tuple[int, str]] = {}
+
+
+async def allowed(bot: Bot, user_id: int, chat_id: int, owner_ids: frozenset[int]) -> bool:
+    if user_id in owner_ids:
+        return True
+    try:
+        member = await bot.get_chat_member(chat_id, user_id)
+        return member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR)
+    except TelegramBadRequest:
+        return False
+
+
+async def known_groups(db: Database) -> list[int]:
+    async with aiosqlite.connect(db.path) as conn:
+        cur = await conn.execute("SELECT DISTINCT chat_id FROM users ORDER BY chat_id DESC")
+        return [int(row[0]) for row in await cur.fetchall()]
+
+
+def groups_keyboard(groups: list[tuple[int, str]]):
+    kb = InlineKeyboardBuilder()
+    for chat_id, title in groups:
+        kb.button(text=title[:50], callback_data=f"vp:group:{chat_id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def group_keyboard(chat_id: int):
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📊 Статистика", callback_data=f"vp:stats:{chat_id}")
+    kb.button(text="🏆 Активные участники", callback_data=f"vp:top:{chat_id}")
+    kb.button(text="🛡 Модерация", callback_data=f"vp:mod:{chat_id}")
+    kb.button(text="🔄 Обновить", callback_data=f"vp:group:{chat_id}")
+    kb.button(text="⬅️ К списку групп", callback_data="vp:groups")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def moderation_keyboard(chat_id: int):
+    kb = InlineKeyboardBuilder()
+    for label, action in [
+        ("⚠️ Предупредить", "warn"),
+        ("🔇 Мут на 10 минут", "mute"),
+        ("🔊 Снять мут", "unmute"),
+        ("👢 Исключить", "kick"),
+        ("⛔ Заблокировать", "ban"),
+        ("🧹 Очистить предупреждения", "clearwarns"),
+    ]:
+        kb.button(text=label, callback_data=f"vp:action:{action}:{chat_id}")
+    kb.button(text="⬅️ Назад", callback_data=f"vp:group:{chat_id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+@router.message(Command("start"), lambda m: m.chat.type == "private")
+async def private_start(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not message.from_user:
+        return
+    groups = []
+    for chat_id in await known_groups(db):
+        if not await allowed(bot, message.from_user.id, chat_id, owner_ids):
+            continue
+        try:
+            chat = await bot.get_chat(chat_id)
+            groups.append((chat_id, chat.title or str(chat_id)))
+        except TelegramBadRequest:
+            continue
+    if not groups:
+        await message.answer(
+            "🌪 <b>VORTEX — личная панель</b>\n\n"
+            "Я пока не нашёл групп, где у тебя есть права администратора. "
+            "Добавь меня в группу и отправь там несколько сообщений, затем повтори /start. "
+            "Владелец бота имеет доступ к группам, которые бот уже обнаружил."
+        )
+        return
+    await message.answer(
+        "🌪 <b>Панель управления VORTEX</b>\n\n"
+        "Выбери беседу. Доступны только группы, где ты администратор, или группы владельца бота.",
+        reply_markup=groups_keyboard(groups),
+    )
+
+
+@router.callback_query(lambda q: q.data == "vp:groups")
+async def show_groups(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not query.message or not query.from_user or query.message.chat.type != "private":
+        await query.answer()
+        return
+    groups = []
+    for chat_id in await known_groups(db):
+        if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+            continue
+        try:
+            chat = await bot.get_chat(chat_id)
+            groups.append((chat_id, chat.title or str(chat_id)))
+        except TelegramBadRequest:
+            pass
+    if groups:
+        await query.message.edit_text("Выбери беседу для управления:", reply_markup=groups_keyboard(groups))
+    else:
+        await query.message.edit_text("Нет доступных групп.")
+    await query.answer()
+
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:group:"))
+async def open_group(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not query.message or not query.from_user or query.message.chat.type != "private":
+        await query.answer()
+        return
+    try:
+        chat_id = int(query.data.rsplit(":", 1)[1])
+    except ValueError:
+        await query.answer("Некорректная группа.", show_alert=True)
+        return
+    if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+        await query.answer("Доступ запрещён: нужны права администратора группы.", show_alert=True)
+        return
+    try:
+        chat = await bot.get_chat(chat_id)
+        title = escape(chat.title or str(chat_id))
+    except TelegramBadRequest:
+        title = str(chat_id)
+    data = await db.chat_stats(chat_id)
+    await query.message.edit_text(
+        f"🌪 <b>{title}</b>\nID: <code>{chat_id}</code>\n\n"
+        f"Участников с активностью: <b>{data['users']}</b>\n"
+        f"Сообщений учтено: <b>{data['messages']}</b>\n"
+        f"Предупреждений: <b>{data['warnings']}</b>\n"
+        f"Срабатываний антифлуда: <b>{data['antiflood']}</b>\n\n"
+        "Выбери раздел управления:",
+        reply_markup=group_keyboard(chat_id),
+    )
+    await query.answer()
+
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:stats:"))
+async def group_stats(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not query.message or not query.from_user or query.message.chat.type != "private":
+        await query.answer()
+        return
+    chat_id = int(query.data.rsplit(":", 1)[1])
+    if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+        await query.answer("Доступ запрещён.", show_alert=True)
+        return
+    data = await db.chat_stats(chat_id)
+    await query.message.edit_text(
+        "📊 <b>Статистика беседы</b>\n\n"
+        f"Участников с активностью: <b>{data['users']}</b>\n"
+        f"Сообщений: <b>{data['messages']}</b>\n"
+        f"Предупреждений: <b>{data['warnings']}</b>\n"
+        f"Антифлуд: <b>{data['antiflood']}</b>",
+        reply_markup=group_keyboard(chat_id),
+    )
+    await query.answer()
+
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:top:"))
+async def group_top(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not query.message or not query.from_user or query.message.chat.type != "private":
+        await query.answer()
+        return
+    chat_id = int(query.data.rsplit(":", 1)[1])
+    if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+        await query.answer("Доступ запрещён.", show_alert=True)
+        return
+    rows = await db.top_activity(chat_id, 10)
+    lines = []
+    for index, (user_id, count) in enumerate(rows, 1):
+        try:
+            member = await bot.get_chat_member(chat_id, user_id)
+            name = escape(member.user.full_name)
+        except TelegramBadRequest:
+            name = f"ID {user_id}"
+        lines.append(f"{index}. {name} — {count} сообщ.")
+    await query.message.edit_text(
+        "🏆 <b>Топ активности</b>\n\n" + ("\n".join(lines) if lines else "Пока нет данных."),
+        reply_markup=group_keyboard(chat_id),
+    )
+    await query.answer()
+
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:mod:"))
+async def moderation_menu(query: CallbackQuery, bot: Bot, owner_ids: frozenset[int]):
+    if not query.message or not query.from_user or query.message.chat.type != "private":
+        await query.answer()
+        return
+    chat_id = int(query.data.rsplit(":", 1)[1])
+    if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+        await query.answer("Доступ запрещён.", show_alert=True)
+        return
+    await query.message.edit_text(
+        "🛡 <b>Модерация из личного чата</b>\n\n"
+        "Выбери действие, затем отправь Telegram ID участника одним сообщением. "
+        "Для отмены отправь /cancel.",
+        reply_markup=moderation_keyboard(chat_id),
+    )
+    await query.answer()
+
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:action:"))
+async def choose_action(query: CallbackQuery, bot: Bot, owner_ids: frozenset[int]):
+    if not query.message or not query.from_user or query.message.chat.type != "private":
+        await query.answer()
+        return
+    _, _, action, chat_id_raw = query.data.split(":")
+    chat_id = int(chat_id_raw)
+    if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+        await query.answer("Доступ запрещён.", show_alert=True)
+        return
+    pending_action[query.from_user.id] = (chat_id, action)
+    await query.message.answer(
+        f"Отправь Telegram ID участника для действия «{action}».\n"
+        "Отмена: /cancel"
+    )
+    await query.answer()
+
+
+@router.message(Command("cancel"), lambda m: m.chat.type == "private")
+async def cancel_action(message: Message):
+    if message.from_user:
+        pending_action.pop(message.from_user.id, None)
+    await message.answer("Действие отменено.")
+
+
+@router.message(lambda m: m.chat.type == "private" and m.from_user and m.from_user.id in pending_action)
+async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not message.from_user:
+        return
+    pending = pending_action.get(message.from_user.id)
+    if not pending:
+        return
+    chat_id, action = pending
+    if not await allowed(bot, message.from_user.id, chat_id, owner_ids):
+        pending_action.pop(message.from_user.id, None)
+        await message.answer("Доступ отозван. Операция отменена.")
+        return
+    raw = (message.text or "").strip()
+    if not raw.isdigit():
+        await message.answer("Нужен числовой Telegram ID. Для отмены /cancel.")
+        return
+    user_id = int(raw)
+    if user_id == message.from_user.id:
+        await message.answer("Нельзя применить действие к самому себе.")
+        return
+    try:
+        target = await bot.get_chat_member(chat_id, user_id)
+        if target.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR) and action not in ("warn", "clearwarns"):
+            await message.answer("Нельзя ограничивать или исключать администратора группы.")
+            pending_action.pop(message.from_user.id, None)
+            return
+        if action == "warn":
+            count = await db.add_warning(chat_id, user_id, message.from_user.id, "Из личной панели")
+            await db.log_event(chat_id, "warn")
+            result = f"⚠️ Выдано предупреждение. Всего: {count}."
+        elif action == "clearwarns":
+            await db.clear_warnings(chat_id, user_id)
+            result = "🧹 Предупреждения очищены."
+        elif action == "mute":
+            await bot.restrict_chat_member(chat_id, user_id, permissions=ChatPermissions(can_send_messages=False),
+                until_date=datetime.now(timezone.utc) + timedelta(minutes=10))
+            result = "🔇 Участник ограничен на 10 минут."
+        elif action == "unmute":
+            await bot.restrict_chat_member(chat_id, user_id, permissions=ChatPermissions(
+                can_send_messages=True, can_send_audios=True, can_send_documents=True, can_send_photos=True,
+                can_send_videos=True, can_send_video_notes=True, can_send_voice_notes=True, can_send_polls=True,
+                can_send_other_messages=True, can_add_web_page_previews=True))
+            result = "🔊 Ограничения сняты."
+        elif action == "kick":
+            await bot.ban_chat_member(chat_id, user_id)
+            await bot.unban_chat_member(chat_id, user_id, only_if_banned=True)
+            result = "👢 Участник исключён."
+        elif action == "ban":
+            await bot.ban_chat_member(chat_id, user_id)
+            result = "⛔ Участник заблокирован."
+        else:
+            result = "Неизвестное действие."
+        pending_action.pop(message.from_user.id, None)
+        await message.answer(result)
+        try:
+            await bot.send_message(chat_id, f"🛡 Администратор выполнил действие: {escape(action)}.")
+        except TelegramBadRequest:
+            pass
+    except TelegramBadRequest as exc:
+        await message.answer(f"Не удалось выполнить действие: {escape(exc.message)}")
