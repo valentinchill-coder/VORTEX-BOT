@@ -1,4 +1,5 @@
 import time
+import re
 from collections import defaultdict, deque
 from html import escape
 
@@ -40,6 +41,44 @@ class AntiFloodMiddleware(BaseMiddleware):
                 pass
         limit = max(1, min(50, int(settings.get("antiflood_limit", self.limit))))
         window = max(1, min(60, int(settings.get("antiflood_window", int(self.window)))))
+        content = (event.text or event.caption or "").casefold()
+        filter_reason = None
+        if content and settings.get("link_filter_enabled", "0") == "1":
+            if re.search(r"(https?://|www\.|t\.me/|telegram\.me/)", content):
+                filter_reason = "filtered_link"
+        if content and filter_reason is None and settings.get("word_filter_enabled", "0") == "1" and db:
+            try:
+                blocked_words = await db.list_blocked_words(event.chat.id)
+                if any(word.casefold() in content for word in blocked_words):
+                    filter_reason = "filtered_word"
+            except Exception:
+                pass
+        if filter_reason:
+            bot = data.get("bot")
+            owners = data.get("owner_ids", frozenset())
+            is_admin = event.from_user.id in owners
+            if bot and not is_admin:
+                try:
+                    member = await bot.get_chat_member(event.chat.id, event.from_user.id)
+                    is_admin = member.status in ("administrator", "creator")
+                except Exception:
+                    is_admin = False
+            if not is_admin:
+                deleted = False
+                try:
+                    await event.delete()
+                    deleted = True
+                except Exception:
+                    pass
+                if db:
+                    try:
+                        details = "message deleted" if deleted else "delete failed; check bot delete permission"
+                        await db.log_moderation_action(event.chat.id, 0, event.from_user.id, filter_reason, details)
+                        await db.log_event(event.chat.id, filter_reason)
+                    except Exception:
+                        pass
+                return None
+
         key = (event.chat.id, event.from_user.id)
         queue = self.messages[key]
         while queue and now - queue[0] > window:
