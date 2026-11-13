@@ -172,6 +172,28 @@ async def private_start(message: Message, bot: Bot, db: Database, owner_ids: fro
     )
 
 
+@router.message(Command("profile"), lambda m: m.chat.type == "private")
+async def private_profile_command(message: Message, db: Database):
+    if not message.from_user:
+        return
+    groups = []
+    for chat_id in await user_profile_groups(db, message.from_user.id):
+        try:
+            chat = await message.bot.get_chat(chat_id)
+            groups.append((chat_id, chat.title or str(chat_id)))
+        except TelegramBadRequest:
+            continue
+    if groups:
+        await message.answer("Выбери группу для просмотра своего профиля:", reply_markup=profile_groups_keyboard(groups))
+    else:
+        await message.answer("Пока нет данных профиля. Напиши несколько сообщений в группе, где работает VORTEX.")
+
+
+@router.message(lambda m: m.chat.type == "private" and m.text and m.text.startswith("/") and not m.text.split()[0].startswith(("/start", "/profile", "/cancel")))
+async def block_private_commands(message: Message):
+    await message.answer("В личном чате доступны просмотр своего профиля и личный кабинет. Команды управления группой работают только при наличии прав администратора в самой группе.")
+
+
 @router.callback_query(lambda q: q.data == "vp:groups")
 async def show_groups(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not query.message or not query.from_user or query.message.chat.type != "private":
