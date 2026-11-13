@@ -11,6 +11,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.db import Database
 from handlers.ranks import get_rank, can_action
+from handlers.moderation import bot_can_restrict, target_is_restrictable
 
 router = Router()
 
@@ -368,6 +369,14 @@ async def member_action_callback(
                 show_alert=True,
             )
             return
+
+        if action in ("mute", "unmute", "kick", "ban"):
+            if not await bot_can_restrict(query.message, bot):
+                await query.answer("У бота недостаточно прав. Подробности отправлены в группу.", show_alert=True)
+                return
+            if not await target_is_restrictable(query.message, bot, target):
+                await query.answer("Нельзя применить это действие к данному участнику.", show_alert=True)
+                return
 
         if action == "warnings":
             count = await db.warning_count(chat_id, user_id)
