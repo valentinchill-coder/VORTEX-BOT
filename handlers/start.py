@@ -127,7 +127,10 @@ MENU_TEXT = {
         "/unmute — снять ограничение\n"
         "/kick — удалить из группы\n"
         "/ban — заблокировать\n"
-        "/unban ID — снять блокировку по Telegram ID"
+        "/unban ID — снять блокировку по Telegram ID\n"
+        "/ranks — иерархия прав\n"
+        "/myrank — мой ранг модерации\n"
+        "/setrank 1 — назначить ранг ответом на сообщение (для ранга 5+) "
     ),
     "warnings": (
         "⚠️ <b>Предупреждения</b>\n\n"
@@ -224,7 +227,7 @@ async def start_command(message: Message):
 async def help_command(message: Message):
     await message.answer(
         "📖 <b>Справка VORTEX BOT</b>\n\n"
-        "Выбери раздел в меню ниже. Команды модерации доступны администраторам группы.",
+        "Выбери раздел в меню ниже. Действия модерации доступны по рангу VORTEX.",
         reply_markup=main_menu(),
     )
 
