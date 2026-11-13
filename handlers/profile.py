@@ -11,6 +11,33 @@ from handlers.ranks import get_rank, RANKS
 router = Router()
 
 
+ACHIEVEMENTS = (
+    ("Первые шаги", "messages", 1, "Напиши первое сообщение в группе"),
+    ("Голос группы", "messages", 100, "Отправь 100 сообщений"),
+    ("Легенда чата", "messages", 1000, "Отправь 1 000 сообщений"),
+    ("Первая победа", "wins", 1, "Одержи первую победу в игре"),
+    ("Чемпион", "wins", 10, "Одержи 10 побед"),
+    ("Опытный игрок", "played", 25, "Сыграй 25 партий"),
+    ("Уважаемый", "reputation", 10, "Получи 10 очков репутации"),
+    ("Коллекционер", "items", 10, "Собери 10 предметов"),
+    ("Богач", "balance", 1000, "Накопи 1 000 V-coins"),
+)
+
+
+def _achievement_text(stats: dict[str, int]) -> str:
+    lines = ["🏅 <b>Достижения VORTEX</b>", ""]
+    unlocked = 0
+    for name, key, target, description in ACHIEVEMENTS:
+        value = stats.get(key, 0)
+        if value >= target:
+            unlocked += 1
+            lines.append(f"🏆 <b>{name}</b> — получено")
+        else:
+            lines.append(f"🔒 <b>{name}</b> — {value}/{target} · {description}")
+    lines.extend(["", f"Открыто достижений: <b>{unlocked}/{len(ACHIEVEMENTS)}</b>"])
+    return "\\n".join(lines)
+
+
 def _rank(messages: int) -> str:
     if messages >= 1000:
         return "🌪 Легенда"
@@ -51,6 +78,15 @@ async def profile_command(message: Message, db: Database, owner_ids: frozenset[i
         f"Предупреждений: <b>{data['warnings']}</b>\n"
         f"В чате с: {first_seen}"
     )
+
+
+@router.message(Command("achievements"))
+async def achievements_command(message: Message, db: Database):
+    if message.chat.type == ChatType.PRIVATE or not message.from_user:
+        await message.answer("Достижения доступны в группе.")
+        return
+    stats = await db.achievement_stats(message.chat.id, message.from_user.id)
+    await message.answer(_achievement_text(stats))
 
 
 @router.message(Command("rep"))
@@ -126,6 +162,7 @@ def profile_keyboard():
     kb.button(text="👤 Мой профиль", callback_data="profile:me")
     kb.button(text="⭐ Топ репутации", callback_data="profile:toprep")
     kb.button(text="📈 Топ активности", callback_data="profile:topactivity")
+    kb.button(text="🏅 Мои достижения", callback_data="profile:achievements")
     kb.button(text="⭐ Выдать репутацию", callback_data="profile:give")
     kb.button(text="⬅️ Главное меню", callback_data="vortex:home")
     kb.adjust(1)
@@ -143,6 +180,9 @@ async def profile_button_callback(query: CallbackQuery, db: Database, owner_ids:
     if action == "give":
         _profile_pending_rep.add((query.message.chat.id, query.from_user.id))
         await query.message.answer("⭐ Чтобы выдать +1 репутацию, ответь любым сообщением на сообщение участника.")
+    elif action == "achievements":
+        stats = await db.achievement_stats(query.message.chat.id, query.from_user.id)
+        await query.message.answer(_achievement_text(stats))
     elif action == "me":
         data = await db.get_profile(query.message.chat.id, query.from_user.id)
         user = data["user"] or {}
