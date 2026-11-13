@@ -1,5 +1,8 @@
 import asyncio
 import logging
+import os
+
+import aiosqlite
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher
@@ -23,6 +26,48 @@ from handlers.shop import initialize_shop
 
 
 WEBHOOK_PATH = "/telegram/webhook"
+
+
+async def notify_audit_ready(bot: Bot, db: Database, owner_ids: frozenset[int]) -> None:
+    """Send the requested one-time readiness notice to configured bot owners."""
+    if os.getenv("AUDIT_READY_NOTIFY", "").strip() != "1":
+        return
+    if not owner_ids:
+        logging.error("AUDIT_READY_NOTIFY is enabled but OWNER_IDS is empty; no Telegram recipient is configured")
+        return
+
+    async with aiosqlite.connect(db.path) as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS bot_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        cursor = await conn.execute("SELECT value FROM bot_meta WHERE key='audit_ready_notice_v1'")
+        row = await cursor.fetchone()
+        if row and row[0] == "sent":
+            return
+
+    delivered = 0
+    failed = 0
+    for owner_id in owner_ids:
+        try:
+            await bot.send_message(owner_id, "Все работает и готово к использованию")
+            delivered += 1
+        except Exception:
+            failed += 1
+            logging.exception("Failed to send audit readiness notice to a configured owner")
+
+    if delivered and not failed:
+        async with aiosqlite.connect(db.path) as conn:
+            await conn.execute(
+                "INSERT INTO bot_meta(key,value) VALUES('audit_ready_notice_v1','sent') "
+                "ON CONFLICT(key) DO UPDATE SET value='sent'"
+            )
+            await conn.commit()
+        logging.info("Audit readiness notice delivered to configured bot owners")
+    else:
+        logging.error("Audit readiness notice incomplete: delivered=%s failed=%s", delivered, failed)
 
 
 async def health_check(request: web.Request) -> web.Response:
@@ -117,6 +162,7 @@ async def main():
     await db.connect()
     await initialize_shop(db)
     dp = create_dispatcher(db, settings.owner_ids)
+    await notify_audit_ready(bot, db, settings.owner_ids)
 
     try:
         me = await bot.get_me()
