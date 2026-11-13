@@ -136,12 +136,12 @@ async def show_private_profile(query: CallbackQuery, bot: Bot, db: Database):
     items = [f"{ITEMS.get(code, {}).get('name', code)} ×{qty}" for code, qty in inventory]
     username = f"@{escape(query.from_user.username)}" if query.from_user.username else "не указан"
     await query.message.answer(
-        f"👤 <b>Твой профиль VORTEX</b>\nГруппа: <b>{escape(chat.title or str(chat_id))}</b>\\n\\n"
-        f"Имя: <b>{escape(query.from_user.full_name)}</b>\\nUsername: {username}\\nРанг: {rank}\\n"
-        f"Сообщений: <b>{messages}</b>\\nРепутация: <b>{data['reputation']}</b> ⭐\\n"
-        f"Предупреждений: <b>{data['warnings']}</b>\\n\\n"
-        f"💰 Баланс: <b>{balance} V-coins</b>\\n🎮 Игровые очки: <b>{game[0]}</b>\\n"
-        f"🏆 Побед: <b>{game[1]}</b> из {game[2]} игр\\n"
+        f"👤 <b>Твой профиль VORTEX</b>\nГруппа: <b>{escape(chat.title or str(chat_id))}</b>\n\n"
+        f"Имя: <b>{escape(query.from_user.full_name)}</b>\nUsername: {username}\nРанг: {rank}\n"
+        f"Сообщений: <b>{messages}</b>\nРепутация: <b>{data['reputation']}</b> ⭐\n"
+        f"Предупреждений: <b>{data['warnings']}</b>\n\n"
+        f"💰 Баланс: <b>{balance} V-coins</b>\n🎮 Игровые очки: <b>{game[0]}</b>\n"
+        f"🏆 Побед: <b>{game[1]}</b> из {game[2]} игр\n"
         f"🎒 Инвентарь: " + (", ".join(items) if items else "пуст")
     )
     await query.answer()
@@ -166,7 +166,7 @@ async def private_start(message: Message, bot: Bot, db: Database, owner_ids: fro
         kb.button(text="🛡 Управление группой", callback_data="vp:groups")
     kb.adjust(1)
     await message.answer(
-        "🌪 <b>VORTEX — личный кабинет</b>\\n\\n"
+        "🌪 <b>VORTEX — личный кабинет</b>\n\n"
         "Профиль доступен каждому участнику. Управление группой отображается только администраторам и владельцу.",
         reply_markup=kb.as_markup(),
     )
