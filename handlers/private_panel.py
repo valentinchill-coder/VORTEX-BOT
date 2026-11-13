@@ -447,29 +447,35 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
             await message.answer("Нельзя ограничивать или исключать администратора группы.")
             pending_action.pop(message.from_user.id, None)
             return
+        if action in {"mute", "unmute", "kick", "ban"}:
+            me = await bot.get_me()
+            bot_member = await bot.get_chat_member(chat_id, me.id)
+            if bot_member.status not in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR):
+                await message.answer("У бота нет прав администратора в этой группе.")
+                pending_action.pop(message.from_user.id, None)
+                return
+            if bot_member.status != ChatMemberStatus.CREATOR and not getattr(bot_member, "can_restrict_members", False):
+                await message.answer("У бота нет права «Блокировка участников». Включи его в настройках администраторов группы.")
+                pending_action.pop(message.from_user.id, None)
+                return
         if action == "warn":
             count = await db.add_warning(chat_id, user_id, message.from_user.id, "Из личной панели")
             await db.log_event(chat_id, "warn")
             result = f"⚠️ Выдано предупреждение. Всего: {count}."
+            details = "Из личной панели"
         elif action == "clearwarns":
             await db.clear_warnings(chat_id, user_id)
             result = "🧹 Предупреждения очищены."
+            details = "Очищено из личной панели"
         elif action == "mute":
             await bot.restrict_chat_member(chat_id, user_id, permissions=ChatPermissions(
-                can_send_messages=False,
-                can_send_audios=False,
-                can_send_documents=False,
-                can_send_photos=False,
-                can_send_videos=False,
-                can_send_video_notes=False,
-                can_send_voice_notes=False,
-                can_send_polls=False,
-                can_send_other_messages=False,
-                can_add_web_page_previews=False,
-                can_manage_topics=False,
-            ),
-                until_date=datetime.now(timezone.utc) + timedelta(minutes=10))
+                can_send_messages=False, can_send_audios=False, can_send_documents=False,
+                can_send_photos=False, can_send_videos=False, can_send_video_notes=False,
+                can_send_voice_notes=False, can_send_polls=False, can_send_other_messages=False,
+                can_add_web_page_previews=False, can_manage_topics=False,
+            ), until_date=datetime.now(timezone.utc) + timedelta(minutes=10))
             result = "🔇 Участник ограничен на 10 минут."
+            details = "10 минут; личная панель"
         elif action == "unmute":
             chat_info = await bot.get_chat(chat_id)
             await bot.restrict_chat_member(chat_id, user_id, permissions=chat_info.permissions or ChatPermissions(
@@ -477,19 +483,26 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
                 can_send_videos=True, can_send_video_notes=True, can_send_voice_notes=True, can_send_polls=True,
                 can_send_other_messages=True, can_add_web_page_previews=True, can_manage_topics=False))
             result = "🔊 Ограничения сняты."
+            details = "Личная панель"
         elif action == "kick":
             await bot.ban_chat_member(chat_id, user_id)
             await bot.unban_chat_member(chat_id, user_id, only_if_banned=True)
             result = "👢 Участник исключён."
+            details = "Личная панель"
         elif action == "ban":
             await bot.ban_chat_member(chat_id, user_id)
             result = "⛔ Участник заблокирован."
+            details = "Личная панель"
         else:
             result = "Неизвестное действие."
+            details = ""
+        await db.log_moderation_action(chat_id, message.from_user.id, user_id, action, details)
         pending_action.pop(message.from_user.id, None)
         await message.answer(result)
         try:
-            await bot.send_message(chat_id, f"🛡 Администратор выполнил действие: {escape(action)}.")
+            actor_name = escape(message.from_user.full_name)
+            target_name = escape(target.user.full_name)
+            await bot.send_message(chat_id, f"🛡 {actor_name} выполнил действие «{escape(action)}» в отношении {target_name}.")
         except TelegramAPIError:
             pass
     except TelegramAPIError as exc:
@@ -580,8 +593,19 @@ async def group_audit_log(query: CallbackQuery, bot: Bot, db: Database, owner_id
         action = escape(str(row.get("action", "action")))
         details = escape(str(row.get("details", "")))
         stamp = escape(str(row.get("created_at", ""))[:16].replace("T", " "))
-        target = f" → <code>{int(row.get('target_id', 0))}</code>" if int(row.get("target_id", 0)) else ""
-        lines.append(f"• <b>{action}</b>{target}\n  <code>{stamp}</code> {details}")
+        actor_id = int(row.get("actor_id", 0) or 0)
+        target_id = int(row.get("target_id", 0) or 0)
+        try:
+            actor_member = await bot.get_chat_member(chat_id, actor_id) if actor_id else None
+            actor_label = escape(actor_member.user.full_name) if actor_member else "Система"
+        except TelegramAPIError:
+            actor_label = f"ID {actor_id}"
+        try:
+            target_member = await bot.get_chat_member(chat_id, target_id) if target_id else None
+            target_label = escape(target_member.user.full_name) if target_member else "—"
+        except TelegramAPIError:
+            target_label = f"ID {target_id}"
+        lines.append(f"• <b>{action}</b>\n  {actor_label} → {target_label}\n  <code>{stamp}</code> {details}")
     if not rows:
         lines.append("Журнал пока пуст.")
     kb = InlineKeyboardBuilder()
@@ -820,7 +844,7 @@ async def receive_rank_target(message: Message, bot: Bot, db: Database, owner_id
             await message.answer("Username участника изменился. Повтори поиск с актуальным @username.")
             return
     except TelegramAPIError:
-        await message.answer("Не удалось найти участника в этой группе. Проверь ID.")
+        await message.answer("Не удалось проверить участника в этой группе. Проверь @username и попробуй снова.")
         return
     if member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR) or target_id in owner_ids or member.user.is_bot:
         await message.answer("Нельзя назначать внутренний ранг администратору Telegram, владельцу или боту.")
