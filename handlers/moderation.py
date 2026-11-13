@@ -59,6 +59,7 @@ async def warn(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
     reason = (message.text or "").partition(" ")[2].strip() or "Причина не указана"
     count = await db.add_warning(message.chat.id, target.id, message.from_user.id, reason)
     await db.log_event(message.chat.id, "warn")
+    await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "warn", reason)
     await message.answer(f"⚠️ {escape(target.full_name)}: предупреждение {count}. Причина: {escape(reason)}")
 
 
@@ -79,6 +80,7 @@ async def clearwarns(message: Message, bot: Bot, db: Database, owner_ids: frozen
     target = await target_from_reply(message)
     if target:
         await db.clear_warnings(message.chat.id, target.id)
+        await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "clear_warnings")
         await message.answer(f"Предупреждения пользователя {escape(target.full_name)} очищены.")
 
 
@@ -128,6 +130,7 @@ async def mute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
             ),
             until_date=until,
         )
+        await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "mute", parts[1] if len(parts) > 1 else "10m")
         await message.answer(f"🔇 {escape(target.full_name)} ограничен на {escape(parts[1]) if len(parts) > 1 else '10m'}.")
     except TelegramAPIError as exc:
         await message.answer(f"Не удалось ограничить пользователя: {exc.message}")
@@ -159,6 +162,7 @@ async def unmute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[
                 can_manage_topics=False,
             ),
         )
+        await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "unmute")
         await message.answer(f"🔊 Ограничения сняты: {escape(target.full_name)}.")
     except TelegramAPIError as exc:
         await message.answer(f"Не удалось снять ограничения: {exc.message}")
@@ -174,6 +178,7 @@ async def kick(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
     try:
         await bot.ban_chat_member(message.chat.id, target.id)
         await bot.unban_chat_member(message.chat.id, target.id, only_if_banned=True)
+        await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "kick")
         await message.answer(f"👢 {escape(target.full_name)} удалён из группы.")
     except TelegramAPIError as exc:
         await message.answer(f"Не удалось удалить пользователя: {exc.message}")
@@ -188,6 +193,7 @@ async def ban(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int
         return
     try:
         await bot.ban_chat_member(message.chat.id, target.id)
+        await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "ban")
         await message.answer(f"⛔ {escape(target.full_name)} заблокирован.")
     except TelegramAPIError as exc:
         await message.answer(f"Не удалось заблокировать пользователя: {exc.message}")
@@ -202,7 +208,28 @@ async def unban(message: Message, bot: Bot, db: Database, owner_ids: frozenset[i
         await message.answer("Укажи Telegram ID: /unban 123456789")
         return
     try:
-        await bot.unban_chat_member(message.chat.id, int(parts[1]), only_if_banned=True)
+        target_id = int(parts[1])
+        await bot.unban_chat_member(message.chat.id, target_id, only_if_banned=True)
+        await db.log_moderation_action(message.chat.id, message.from_user.id, target_id, "unban")
         await message.answer("Блокировка снята.")
     except TelegramAPIError as exc:
         await message.answer(f"Не удалось разблокировать: {exc.message}")
+
+
+@router.message(Command("audit"))
+async def audit_command(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not await rank_denial(message, db, bot, owner_ids, "audit"):
+        return
+    rows = await db.recent_moderation_actions(message.chat.id, limit=15)
+    if not rows:
+        await message.answer("📋 Журнал модерации пока пуст.")
+        return
+    lines = ["📋 <b>Последние действия модерации</b>", ""]
+    for row in rows:
+        details = f" · {escape(row['details'])}" if row["details"] else ""
+        lines.append(
+            f"<code>{escape(row['created_at'][:16])}</code> "
+            f"<b>{escape(row['action'])}</b> · "
+            f"{row['actor_id']} → {row['target_id']}{details}"
+        )
+    await message.answer("\\n".join(lines))
