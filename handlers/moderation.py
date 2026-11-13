@@ -9,6 +9,7 @@ from aiogram.types import Message, ChatPermissions
 from aiogram.exceptions import TelegramAPIError
 
 from database.db import Database
+from handlers.ranks import rank_denial
 
 router = Router()
 
@@ -50,7 +51,7 @@ async def check_admin(message: Message, bot: Bot, owner_ids: frozenset[int]) -> 
 
 @router.message(Command("warn"))
 async def warn(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
-    if not await check_admin(message, bot, owner_ids):
+    if not await rank_denial(message, db, bot, owner_ids, "warn"):
         return
     target = await target_from_reply(message)
     if not target:
@@ -63,7 +64,7 @@ async def warn(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
 
 @router.message(Command("warnings"))
 async def warnings(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
-    if not await check_admin(message, bot, owner_ids):
+    if not await rank_denial(message, db, bot, owner_ids, "warnings"):
         return
     target = await target_from_reply(message)
     if target:
@@ -73,7 +74,7 @@ async def warnings(message: Message, bot: Bot, db: Database, owner_ids: frozense
 
 @router.message(Command("clearwarns"))
 async def clearwarns(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
-    if not await check_admin(message, bot, owner_ids):
+    if not await rank_denial(message, db, bot, owner_ids, "clearwarns"):
         return
     target = await target_from_reply(message)
     if target:
@@ -96,8 +97,8 @@ def parse_duration(value: str) -> timedelta | None:
 
 
 @router.message(Command("mute"))
-async def mute(message: Message, bot: Bot, owner_ids: frozenset[int]):
-    if not await check_admin(message, bot, owner_ids):
+async def mute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not await rank_denial(message, db, bot, owner_ids, "mute"):
         return
     target = await target_from_reply(message)
     if not target:
@@ -133,8 +134,8 @@ async def mute(message: Message, bot: Bot, owner_ids: frozenset[int]):
 
 
 @router.message(Command("unmute"))
-async def unmute(message: Message, bot: Bot, owner_ids: frozenset[int]):
-    if not await check_admin(message, bot, owner_ids):
+async def unmute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not await rank_denial(message, db, bot, owner_ids, "unmute"):
         return
     target = await target_from_reply(message)
     if not target:
@@ -164,8 +165,8 @@ async def unmute(message: Message, bot: Bot, owner_ids: frozenset[int]):
 
 
 @router.message(Command("kick"))
-async def kick(message: Message, bot: Bot, owner_ids: frozenset[int]):
-    if not await check_admin(message, bot, owner_ids):
+async def kick(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not await rank_denial(message, db, bot, owner_ids, "kick"):
         return
     target = await target_from_reply(message)
     if not target:
@@ -179,8 +180,8 @@ async def kick(message: Message, bot: Bot, owner_ids: frozenset[int]):
 
 
 @router.message(Command("ban"))
-async def ban(message: Message, bot: Bot, owner_ids: frozenset[int]):
-    if not await check_admin(message, bot, owner_ids):
+async def ban(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not await rank_denial(message, db, bot, owner_ids, "ban"):
         return
     target = await target_from_reply(message)
     if not target:
@@ -193,8 +194,8 @@ async def ban(message: Message, bot: Bot, owner_ids: frozenset[int]):
 
 
 @router.message(Command("unban"))
-async def unban(message: Message, bot: Bot, owner_ids: frozenset[int]):
-    if not await check_admin(message, bot, owner_ids):
+async def unban(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not await rank_denial(message, db, bot, owner_ids, "unban"):
         return
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) != 2 or not parts[1].isdigit():
