@@ -128,10 +128,11 @@ async def unmute(message: Message, bot: Bot, owner_ids: frozenset[int]):
     if not target:
         return
     try:
+        chat = await bot.get_chat(message.chat.id)
         await bot.restrict_chat_member(
             message.chat.id,
             target.id,
-            permissions=ChatPermissions(
+            permissions=chat.permissions or ChatPermissions(
                 can_send_messages=True,
                 can_send_audios=True,
                 can_send_documents=True,
