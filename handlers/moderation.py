@@ -241,11 +241,13 @@ async def kick(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
         return
     if not await bot_can_restrict(message, bot) or not await target_is_restrictable(message, bot, target):
         return
+    parts = (message.text or "").split(maxsplit=1)
+    reason = parts[1].strip()[:500] if len(parts) > 1 else "Причина не указана"
     try:
         await bot.ban_chat_member(message.chat.id, target.id)
         await bot.unban_chat_member(message.chat.id, target.id, only_if_banned=True)
-        await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "kick")
-        await message.answer(f"👢 {escape(target.full_name)} удалён из группы.")
+        await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "kick", reason)
+        await message.answer(f"👢 {escape(target.full_name)} удалён из группы. Причина: {escape(reason)}")
     except TelegramAPIError as exc:
         await message.answer(f"Не удалось удалить пользователя: {exc.message}")
 
@@ -259,10 +261,12 @@ async def ban(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int
         return
     if not await bot_can_restrict(message, bot) or not await target_is_restrictable(message, bot, target):
         return
+    parts = (message.text or "").split(maxsplit=1)
+    reason = parts[1].strip()[:500] if len(parts) > 1 else "Причина не указана"
     try:
         await bot.ban_chat_member(message.chat.id, target.id)
-        await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "ban")
-        await message.answer(f"⛔ {escape(target.full_name)} заблокирован.")
+        await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "ban", reason)
+        await message.answer(f"⛔ {escape(target.full_name)} заблокирован. Причина: {escape(reason)}")
     except TelegramAPIError as exc:
         await message.answer(f"Не удалось заблокировать пользователя: {exc.message}")
 
@@ -271,17 +275,18 @@ async def ban(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int
 async def unban(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not await rank_denial(message, db, bot, owner_ids, "unban"):
         return
-    parts = (message.text or "").split(maxsplit=1)
-    if len(parts) != 2 or not parts[1].isdigit():
-        await message.answer("Укажи Telegram ID: /unban 123456789")
+    parts = (message.text or "").split(maxsplit=2)
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.answer("Укажи Telegram ID: /unban 123456789 [причина]")
         return
+    reason = parts[2].strip()[:500] if len(parts) > 2 else "Причина не указана"
     if not await bot_can_restrict(message, bot):
         return
     try:
         target_id = int(parts[1])
         await bot.unban_chat_member(message.chat.id, target_id, only_if_banned=True)
-        await db.log_moderation_action(message.chat.id, message.from_user.id, target_id, "unban")
-        await message.answer("Блокировка снята.")
+        await db.log_moderation_action(message.chat.id, message.from_user.id, target_id, "unban", reason)
+        await message.answer(f"Блокировка снята. Причина: {escape(reason)}")
     except TelegramAPIError as exc:
         await message.answer(f"Не удалось разблокировать: {exc.message}")
 
