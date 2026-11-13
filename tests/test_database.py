@@ -233,5 +233,23 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await self.db.set_chat_setting(-1001, "antiflood_limit", "999", 99)
 
+
+    async def test_group_filters_persist_and_blocked_words_are_normalized(self):
+        defaults = await self.db.get_chat_settings(-2001)
+        self.assertEqual(defaults["link_filter_enabled"], "0")
+        self.assertEqual(defaults["word_filter_enabled"], "0")
+        await self.db.set_chat_setting(-2001, "link_filter_enabled", "1", 100)
+        await self.db.set_chat_setting(-2001, "word_filter_enabled", "1", 100)
+        self.assertEqual((await self.db.get_chat_settings(-2001))["link_filter_enabled"], "1")
+        added = await self.db.add_blocked_word(-2001, "  BAD   Phrase ", 100)
+        self.assertTrue(added)
+        self.assertFalse(await self.db.add_blocked_word(-2001, "bad phrase", 100))
+        self.assertEqual(await self.db.list_blocked_words(-2001), ["bad phrase"])
+        self.assertTrue(await self.db.remove_blocked_word(-2001, "BAD PHRASE", 100))
+        self.assertEqual(await self.db.list_blocked_words(-2001), [])
+        with self.assertRaises(ValueError):
+            await self.db.add_blocked_word(-2001, "x" * 33, 100)
+
+
 if __name__ == "__main__":
     unittest.main()
