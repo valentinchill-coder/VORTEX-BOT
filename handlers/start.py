@@ -3,7 +3,7 @@ from html import escape
 
 from aiogram import Bot, Router
 from aiogram.enums import ChatMemberStatus
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, ChatPermissions
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -11,6 +11,14 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from database.db import Database
 
 router = Router()
+
+
+async def _safe_edit(message: Message, text: str, reply_markup=None) -> None:
+    try:
+        await message.edit_text(text, reply_markup=reply_markup)
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in exc.message.lower():
+            raise
 
 # Pending participant selection: (chat_id, admin_id)
 pending_selection: set[tuple[int, int]] = set()
@@ -384,18 +392,18 @@ async def menu_callback(query: CallbackQuery, db: Database):
             "Твой помощник по управлению Telegram-группой.\n\n"
             "Выбери нужный раздел в меню:"
         )
-        await query.message.edit_text(text, reply_markup=main_menu())
+        await _safe_edit(query.message, text, reply_markup=main_menu())
     elif section == "games":
-        await query.message.edit_text(MENU_TEXT[section], reply_markup=games_menu())
+        await _safe_edit(query.message, MENU_TEXT[section], reply_markup=games_menu())
     elif section == "shop":
-        await query.message.edit_text(
+        await _safe_edit(query.message, 
             "🛒 <b>Предметы и рынок VORTEX</b>\n\n"
             "Покупай предметы за V-coins, храни их в инвентаре, используй расходники, "
             "дарить предметы другим участникам или выставляй их на рынок.",
             reply_markup=shop_menu(),
         )
     elif section == "shop_catalog":
-        await query.message.edit_text(
+        await _safe_edit(query.message, 
             "🛍 <b>Каталог магазина</b>\n\n"
             "🌹 Роза — 100 V-coins\n"
             "🍫 Шоколад — 250 V-coins\n"
@@ -407,7 +415,7 @@ async def menu_callback(query: CallbackQuery, db: Database):
             reply_markup=shop_menu(),
         )
     elif section == "shop_inventory":
-        await query.message.edit_text(
+        await _safe_edit(query.message, 
             "🎒 <b>Инвентарь</b>\n\n"
             "Команда /inventory покажет твои предметы.\n\n"
             "Использовать расходник: /useitem lucky_charm\n"
@@ -416,7 +424,7 @@ async def menu_callback(query: CallbackQuery, db: Database):
             reply_markup=shop_menu(),
         )
     elif section == "shop_market":
-        await query.message.edit_text(
+        await _safe_edit(query.message, 
             "🏪 <b>Рынок игроков</b>\n\n"
             "/market — посмотреть объявления\n"
             "/sellitem rose 1 150 — выставить предмет (цена за штуку)\n"
@@ -425,21 +433,21 @@ async def menu_callback(query: CallbackQuery, db: Database):
             reply_markup=shop_menu(),
         )
     elif section == "economy":
-        await query.message.edit_text(
+        await _safe_edit(query.message, 
             "💰 <b>Экономика VORTEX</b>\n\n"
             "Управляй монетами кнопками ниже. Для перевода выбери кнопку и ответь суммой на сообщение получателя. "
             "Для обмена очков просто введи количество после нажатия кнопки.",
             reply_markup=economy_section_keyboard(),
         )
     elif section in ("profile", "reputation"):
-        await query.message.edit_text(
+        await _safe_edit(query.message, 
             "👤 <b>Профиль и репутация</b>\n\n"
             "Просматривай профиль, рейтинги и выдавай репутацию через кнопки.",
             reply_markup=profile_section_keyboard(),
         )
     elif section == "stats":
         data = await db.chat_stats(query.message.chat.id)
-        await query.message.edit_text(
+        await _safe_edit(query.message, 
             "📊 <b>Статистика группы</b>\n\n"
             f"Участников в базе: <b>{data['users']}</b>\n"
             f"Сообщений: <b>{data['messages']}</b>\n"
@@ -448,5 +456,5 @@ async def menu_callback(query: CallbackQuery, db: Database):
             reply_markup=stats_section_keyboard(),
         )
     elif section in MENU_TEXT:
-        await query.message.edit_text(MENU_TEXT[section], reply_markup=back_menu())
+        await _safe_edit(query.message, MENU_TEXT[section], reply_markup=back_menu())
     await query.answer()
