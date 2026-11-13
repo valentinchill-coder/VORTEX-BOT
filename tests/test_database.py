@@ -78,6 +78,10 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         claimed, balance = await self.db.claim_daily_quest_rewards(-1001, 10, rules)
         self.assertEqual(set(claimed), {"messages_10", "games_3", "win_1"})
         self.assertEqual(balance, 35)
+        self.assertEqual(
+            await self.db.claimed_daily_quests(-1001, 10),
+            {"messages_10", "games_3", "win_1"},
+        )
 
         claimed_again, balance_again = await self.db.claim_daily_quest_rewards(-1001, 10, rules)
         self.assertEqual(claimed_again, [])
