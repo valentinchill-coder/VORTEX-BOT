@@ -41,7 +41,9 @@ def create_dispatcher(db: Database, owner_ids: frozenset[int]) -> Dispatcher:
     dp["owner_ids"] = owner_ids
     dp.message.middleware(AntiFloodMiddleware(limit=6, window=8.0))
 
-    # Private admin panel must precede the generic /start handler.\n    dp.include_router(private_panel.router)\n    dp.include_router(start.router)
+    # Private admin panel must precede the generic /start handler.
+    dp.include_router(private_panel.router)
+    dp.include_router(start.router)
     dp.include_router(moderation.router)
     dp.include_router(admin.router)
     dp.include_router(profile.router)
