@@ -374,6 +374,9 @@ async def menu_callback(query: CallbackQuery, db: Database):
     if not query.message:
         await query.answer()
         return
+    if query.message.chat.type == "private":
+        await query.answer("Это меню работает в группе. В личном чате доступен просмотр своего профиля.", show_alert=True)
+        return
     if section == "home":
         text = (
             "🌪 <b>VORTEX BOT</b>\n"
