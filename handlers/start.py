@@ -414,24 +414,24 @@ async def menu_callback(query: CallbackQuery, db: Database):
         )
     elif section == "economy":
         await query.message.edit_text(
-            "💰 <b>Экономика VORTEX</b>\\n\\n"
+            "💰 <b>Экономика VORTEX</b>\n\n"
             "Управляй монетами кнопками ниже. Для перевода выбери кнопку и ответь суммой на сообщение получателя. "
             "Для обмена очков просто введи количество после нажатия кнопки.",
             reply_markup=economy_section_keyboard(),
         )
     elif section in ("profile", "reputation"):
         await query.message.edit_text(
-            "👤 <b>Профиль и репутация</b>\\n\\n"
+            "👤 <b>Профиль и репутация</b>\n\n"
             "Просматривай профиль, рейтинги и выдавай репутацию через кнопки.",
             reply_markup=profile_section_keyboard(),
         )
     elif section == "stats":
         data = await db.chat_stats(query.message.chat.id)
         await query.message.edit_text(
-            "📊 <b>Статистика группы</b>\\n\\n"
-            f"Участников в базе: <b>{data['users']}</b>\\n"
-            f"Сообщений: <b>{data['messages']}</b>\\n"
-            f"Предупреждений: <b>{data['warnings']}</b>\\n"
+            "📊 <b>Статистика группы</b>\n\n"
+            f"Участников в базе: <b>{data['users']}</b>\n"
+            f"Сообщений: <b>{data['messages']}</b>\n"
+            f"Предупреждений: <b>{data['warnings']}</b>\n"
             f"Срабатываний антифлуда: <b>{data['antiflood']}</b>",
             reply_markup=stats_section_keyboard(),
         )
