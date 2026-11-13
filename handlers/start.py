@@ -342,9 +342,10 @@ async def member_action_callback(
             )
             result = f"🔇 {escape(target.full_name)} ограничен на 10 минут."
         elif action == "unmute":
+            chat_info = await bot.get_chat(chat_id)
             await bot.restrict_chat_member(
                 chat_id, user_id,
-                permissions=ChatPermissions(
+                permissions=chat_info.permissions or ChatPermissions(
                     can_send_messages=True, can_send_audios=True, can_send_documents=True,
                     can_send_photos=True, can_send_videos=True, can_send_video_notes=True,
                     can_send_voice_notes=True, can_send_polls=True,
