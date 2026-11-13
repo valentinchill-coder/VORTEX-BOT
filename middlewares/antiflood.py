@@ -93,6 +93,9 @@ class AntiFloodMiddleware(BaseMiddleware):
             queue.popleft()
         if settings.get("antiflood_enabled", "1") == "1":
             queue.append(now)
+        else:
+            # Do not carry stale messages across an off/on toggle.
+            queue.clear()
         self._checks += 1
         if self._checks % 256 == 0:
             for stale_key, stale_queue in list(self.messages.items()):
@@ -117,6 +120,13 @@ class AntiFloodMiddleware(BaseMiddleware):
                         "Автоматическое предупреждение за флуд",
                     )
                     await db.log_event(event.chat.id, "antiflood")
+                    await db.log_moderation_action(
+                        event.chat.id,
+                        0,
+                        event.from_user.id,
+                        "antiflood_warn",
+                        f"limit={limit}; window={window}s; warnings={count}",
+                    )
                     bot = data.get("bot")
                     if bot:
                         await bot.send_message(
