@@ -20,7 +20,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 
 from config import load_settings
 from database.db import Database
-from handlers import start, moderation, admin, profile, economy, games, shop, natural, private_panel, ranks
+from handlers import start, moderation, admin, profile, economy, games, shop, natural, private_panel, ranks, quests
 from middlewares.antiflood import AntiFloodMiddleware
 from handlers.shop import initialize_shop
 
@@ -125,6 +125,7 @@ def create_dispatcher(db: Database, owner_ids: frozenset[int]) -> Dispatcher:
     dp.include_router(economy.router)
     dp.include_router(games.router)
     dp.include_router(shop.router)
+    dp.include_router(quests.router)
     # Keep natural-language matching last so existing pending inputs and game turns win first.
     dp.include_router(natural.router)
     dp.chat_member.register(
@@ -207,6 +208,8 @@ async def main():
             BotCommand(command="toprep", description="Топ репутации группы"),
             BotCommand(command="topactivity", description="Топ активности группы"),
             BotCommand(command="achievements", description="Мои достижения"),
+            BotCommand(command="quests", description="Ежедневные задания"),
+            BotCommand(command="claimquests", description="Забрать награды за задания"),
             BotCommand(command="balance", description="Баланс участника (ответом)"),
             BotCommand(command="daily", description="Получить ежедневную награду"),
             BotCommand(command="pay", description="Перевести V-coins (ответом)"),
