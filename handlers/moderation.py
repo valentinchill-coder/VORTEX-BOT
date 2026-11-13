@@ -112,7 +112,19 @@ async def mute(message: Message, bot: Bot, owner_ids: frozenset[int]):
         await bot.restrict_chat_member(
             message.chat.id,
             target.id,
-            permissions=ChatPermissions(can_send_messages=False),
+            permissions=ChatPermissions(
+                can_send_messages=False,
+                can_send_audios=False,
+                can_send_documents=False,
+                can_send_photos=False,
+                can_send_videos=False,
+                can_send_video_notes=False,
+                can_send_voice_notes=False,
+                can_send_polls=False,
+                can_send_other_messages=False,
+                can_add_web_page_previews=False,
+                can_manage_topics=False,
+            ),
             until_date=until,
         )
         await message.answer(f"🔇 {escape(target.full_name)} ограничен на {escape(parts[1]) if len(parts) > 1 else '10m'}.")
