@@ -142,20 +142,21 @@ def parse_intent(text: str) -> str | None:
         return "/warnings"
     if re.search(r"\b(очисти предупреждения|сбрось предупреждения)\b", value):
         return "/clearwarns"
-    if re.search(r"\b(сними мут|размути|верни возможность писать)\b", value):
+    if re.search(r"\b(сними мут|размути|размут|анмут|верни возможность писать)\b", value):
         return "/unmute"
-    if re.search(r"\b(замути|мут на|ограничь писать)\b", value):
-        duration = re.search(r"(\d+)\s*(минут\w*|час\w*|дн\w*)", value)
+    if re.search(r"\b(замути|замутить|мут|mute|ограничь писать)\b", value):
+        duration = re.search(r"(\d+)\s*(минут\w*|мин\b|час\w*|ч\b|дн\w*|д\b)", value)
         if not duration:
             return "/mute 10m"
-        unit = "m" if duration.group(2).startswith("мин") else ("h" if duration.group(2).startswith("час") else "d")
+        unit_word = duration.group(2)
+        unit = "m" if unit_word.startswith("мин") else ("h" if unit_word.startswith(("час", "ч")) else "d")
         return f"/mute {duration.group(1)}{unit}"
-    if re.search(r"\b(разбань|сними бан)\b", value):
+    if re.search(r"\b(разбань|разбанить|сними бан|unban)\b", value):
         match = re.search(r"\b(\d{5,})\b", value)
         return f"/unban {match.group(1)}" if match else "__need_unban_id__"
-    if re.search(r"\b(забань|заблокируй участника)\b", value):
+    if re.search(r"\b(забань|забанить|бан|бань|заблокируй участника|ban)\b", value):
         return "/ban"
-    if re.search(r"\b(кикни|исключи участника|удали участника из группы)\b", value):
+    if re.search(r"\b(кикни|кикнуть|кик|исключи участника|удали участника из группы|kick)\b", value):
         return "/kick"
 
     if re.fullmatch(r"помощь|что ты умеешь|как тобой пользоваться|список возможностей", value):
