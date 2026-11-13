@@ -16,13 +16,16 @@ DAILY_QUESTS = (
 )
 
 
-def format_quests(progress: dict[str, int]) -> str:
+def format_quests(progress: dict[str, int], claimed: set[str] | None = None) -> str:
+    claimed = claimed or set()
     lines = ["📜 <b>Ежедневные задания VORTEX</b>", ""]
     available_reward = 0
     for _quest_id, title, metric, target, reward, description in DAILY_QUESTS:
         value = progress.get(metric, 0)
-        if value >= target:
-            state = "✅ Выполнено"
+        if quest_id in claimed:
+            state = "🏅 Награда уже получена"
+        elif value >= target:
+            state = "🎁 Выполнено — забери награду"
             available_reward += reward
         else:
             state = f"⏳ {value}/{target}"
@@ -78,7 +81,8 @@ async def quests_command(message: Message, db: Database):
         await message.answer("Ежедневные задания доступны в группе.")
         return
     progress = await db.daily_quest_progress(message.chat.id, message.from_user.id)
-    await message.answer(format_quests(progress), reply_markup=quest_keyboard())
+    claimed = await db.claimed_daily_quests(message.chat.id, message.from_user.id)
+    await message.answer(format_quests(progress, claimed), reply_markup=quest_keyboard())
 
 
 @router.message(Command("claimquests"))
@@ -112,7 +116,8 @@ async def quests_show_callback(query: CallbackQuery, db: Database):
         await _safe_query_answer(query, "Задания доступны в группе.", show_alert=True)
         return
     progress = await db.daily_quest_progress(query.message.chat.id, query.from_user.id)
-    await query.message.answer(format_quests(progress), reply_markup=quest_keyboard())
+    claimed = await db.claimed_daily_quests(query.message.chat.id, query.from_user.id)
+    await query.message.answer(format_quests(progress, claimed), reply_markup=quest_keyboard())
     await _safe_query_answer(query)
 
 
