@@ -109,4 +109,4 @@ async def top_activity_command(message: Message, db: Database):
         except Exception:
             name = f"Участник {user_id}"
         lines.append(f"{index}. {name} — <b>{messages}</b> сообщений")
-    await message.answer("\\n".join(lines))
+    await message.answer("\n".join(lines))
