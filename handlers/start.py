@@ -25,9 +25,10 @@ def main_menu():
     keyboard.button(text="📊 Статистика", callback_data="vortex:stats")
     keyboard.button(text="👤 Профиль", callback_data="vortex:profile")
     keyboard.button(text="⭐ Репутация", callback_data="vortex:reputation")
+    keyboard.button(text="💰 Экономика", callback_data="vortex:economy")
     keyboard.button(text="👋 Приветствие", callback_data="vortex:welcome")
     keyboard.button(text="📖 Все команды", callback_data="vortex:commands")
-    keyboard.adjust(2, 2, 2, 2, 1)
+    keyboard.adjust(2, 2, 2, 2, 2)
     return keyboard.as_markup()
 
 
@@ -88,6 +89,13 @@ MENU_TEXT = {
         "⭐ <b>Репутация</b>\n\n"
         "Ответь командой /rep на сообщение, чтобы выдать +1 репутации.\n"
         "/toprep — рейтинг участников. Повторно выдать репутацию одному человеку можно на следующий день."
+    ),
+    "economy": (
+        "💰 <b>Экономика VORTEX</b>\n\n"
+        "/balance — посмотреть баланс\n"
+        "/daily — получить ежедневные 100 V-coins\n"
+        "Ответь командой /pay 50 на сообщение участника, чтобы перевести ему 50 монет.\n"
+        "/topmoney — рейтинг богачей группы"
     ),
     "welcome": (
         "👋 <b>Приветствие</b>\n\n"
