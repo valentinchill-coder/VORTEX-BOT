@@ -232,4 +232,4 @@ async def audit_command(message: Message, bot: Bot, db: Database, owner_ids: fro
             f"<b>{escape(row['action'])}</b> · "
             f"{row['actor_id']} → {row['target_id']}{details}"
         )
-    await message.answer("\\n".join(lines))
+    await message.answer("\n".join(lines))
