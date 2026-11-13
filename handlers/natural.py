@@ -62,9 +62,6 @@ def parse_intent(text: str) -> str | None:
         return "/market"
     if re.search(r"\b(топ игр|рейтинг игр|лидеры игр)\b", value):
         return "/topgames"
-    if re.search(r"\b(игры|игровой зал|начни игру|хочу поиграть)\b", value):
-        return "/games"
-
     # Games.
     if re.search(r"\b(угадай число|игра угадай|загадай число)\b", value):
         return "__game_guess__"
@@ -72,6 +69,9 @@ def parse_intent(text: str) -> str | None:
         return "__game_rps__"
     if re.search(r"\b(викторин\w*|квиз|вопрос на знание)\b", value):
         return "__game_quiz__"
+
+    if re.search(r"\b(игры|игровой зал|начни игру|хочу поиграть)\b", value):
+        return "/games"
 
     # Economy.
     match = re.search(r"\b(?:обменяй|обменять|конвертируй)\s+(\d+)\s*(?:игровых?\s*)?(?:очк\w*)", value)
