@@ -195,7 +195,7 @@ async def economy_button_callback(query: CallbackQuery, db: Database):
             except Exception:
                 name = f"Участник {uid}"
             lines.append(f"{i}. {name} — <b>{amount}</b> V-coins")
-        await query.message.answer("\\n".join(lines) if leaders else "Пока рейтинг пуст.")
+        await query.message.answer("\n".join(lines) if leaders else "Пока рейтинг пуст.")
     else:
         await query.answer("Неизвестное действие.", show_alert=True)
         return
