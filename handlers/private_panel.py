@@ -4,7 +4,7 @@ from html import escape
 import aiosqlite
 from aiogram import Bot, Router
 from aiogram.enums import ChatMemberStatus
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, ChatPermissions
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -21,7 +21,7 @@ async def allowed(bot: Bot, user_id: int, chat_id: int, owner_ids: frozenset[int
     try:
         member = await bot.get_chat_member(chat_id, user_id)
         return member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR)
-    except TelegramBadRequest:
+    except TelegramAPIError:
         return False
 
 
@@ -90,7 +90,7 @@ async def choose_profile_group(query: CallbackQuery, db: Database):
         try:
             chat = await query.bot.get_chat(chat_id)
             groups.append((chat_id, chat.title or str(chat_id)))
-        except TelegramBadRequest:
+        except TelegramAPIError:
             continue
     if groups:
         await query.message.answer("Выбери группу для просмотра своего профиля:", reply_markup=profile_groups_keyboard(groups))
@@ -124,7 +124,7 @@ async def show_private_profile(query: CallbackQuery, bot: Bot, db: Database):
             await query.answer("Ты больше не состоишь в этой группе.", show_alert=True)
             return
         chat = await bot.get_chat(chat_id)
-    except TelegramBadRequest:
+    except TelegramAPIError:
         await query.answer("Не удалось проверить участие в группе.", show_alert=True)
         return
     data = await db.get_profile(chat_id, query.from_user.id)
@@ -151,6 +151,7 @@ async def show_private_profile(query: CallbackQuery, bot: Bot, db: Database):
 async def private_start(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not message.from_user:
         return
+    pending_action.pop(message.from_user.id, None)
     groups = []
     for chat_id in await known_groups(db):
         if not await allowed(bot, message.from_user.id, chat_id, owner_ids):
@@ -158,7 +159,7 @@ async def private_start(message: Message, bot: Bot, db: Database, owner_ids: fro
         try:
             chat = await bot.get_chat(chat_id)
             groups.append((chat_id, chat.title or str(chat_id)))
-        except TelegramBadRequest:
+        except TelegramAPIError:
             continue
     kb = InlineKeyboardBuilder()
     kb.button(text="👤 Мой профиль", callback_data="vp:myprofile")
@@ -176,12 +177,13 @@ async def private_start(message: Message, bot: Bot, db: Database, owner_ids: fro
 async def private_profile_command(message: Message, db: Database):
     if not message.from_user:
         return
+    pending_action.pop(message.from_user.id, None)
     groups = []
     for chat_id in await user_profile_groups(db, message.from_user.id):
         try:
             chat = await message.bot.get_chat(chat_id)
             groups.append((chat_id, chat.title or str(chat_id)))
-        except TelegramBadRequest:
+        except TelegramAPIError:
             continue
     if groups:
         await message.answer("Выбери группу для просмотра своего профиля:", reply_markup=profile_groups_keyboard(groups))
@@ -206,7 +208,7 @@ async def show_groups(query: CallbackQuery, bot: Bot, db: Database, owner_ids: f
         try:
             chat = await bot.get_chat(chat_id)
             groups.append((chat_id, chat.title or str(chat_id)))
-        except TelegramBadRequest:
+        except TelegramAPIError:
             pass
     if groups:
         await query.message.edit_text("Выбери беседу для управления:", reply_markup=groups_keyboard(groups))
@@ -231,7 +233,7 @@ async def open_group(query: CallbackQuery, bot: Bot, db: Database, owner_ids: fr
     try:
         chat = await bot.get_chat(chat_id)
         title = escape(chat.title or str(chat_id))
-    except TelegramBadRequest:
+    except TelegramAPIError:
         title = str(chat_id)
     data = await db.chat_stats(chat_id)
     await query.message.edit_text(
@@ -290,7 +292,7 @@ async def group_top(query: CallbackQuery, bot: Bot, db: Database, owner_ids: fro
         try:
             member = await bot.get_chat_member(chat_id, user_id)
             name = escape(member.user.full_name)
-        except TelegramBadRequest:
+        except TelegramAPIError:
             name = f"ID {user_id}"
         lines.append(f"{index}. {name} — {count} сообщ.")
     await query.message.edit_text(
@@ -423,7 +425,7 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
         await message.answer(result)
         try:
             await bot.send_message(chat_id, f"🛡 Администратор выполнил действие: {escape(action)}.")
-        except TelegramBadRequest:
+        except TelegramAPIError:
             pass
-    except TelegramBadRequest as exc:
+    except TelegramAPIError as exc:
         await message.answer(f"Не удалось выполнить действие: {escape(exc.message)}")
