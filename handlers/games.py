@@ -139,7 +139,7 @@ async def guess_command(message: Message, db: Database):
         return
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) != 2:
-        await message.answer("Напиши число от 1 до 100: /guess 50")
+        await message.answer(f"Напиши число от {GUESS_MIN} до {GUESS_MAX}: /guess 32")
         return
     try:
         guess = int(parts[1])
