@@ -54,6 +54,23 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(unchanged, 40)
         self.assertEqual(await self.db.get_balance(-1001, 20), 60)
 
+
+    async def test_exchange_game_points_is_atomic_and_credits_wallet(self):
+        await self.db.add_game_result(-1001, 10, 125, True)
+        success, points_left, balance, coins = await self.db.exchange_game_points(
+            -1001, 10, 100, rate=10
+        )
+        self.assertTrue(success)
+        self.assertEqual((points_left, balance, coins), (25, 10, 10))
+        self.assertEqual(await self.db.get_balance(-1001, 10), 10)
+        failed, points_left, balance, coins = await self.db.exchange_game_points(
+            -1001, 10, 30, rate=10
+        )
+        self.assertFalse(failed)
+        self.assertEqual((points_left, balance, coins), (25, 10, 0))
+        invalid, *_ = await self.db.exchange_game_points(-1001, 10, 11, rate=10)
+        self.assertFalse(invalid)
+
     async def test_game_points_and_leaderboard_are_group_scoped(self):
         total, wins, played = await self.db.add_game_result(-1001, 10, 10, True)
         self.assertEqual((total, wins, played), (10, 1, 1))
