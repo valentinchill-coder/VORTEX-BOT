@@ -197,6 +197,7 @@ async def main():
             BotCommand(command="start", description="Открыть личный кабинет"),
             BotCommand(command="profile", description="Посмотреть свой профиль"),
             BotCommand(command="help", description="Помощь"),
+            BotCommand(command="backup", description="Скачать резервную копию базы (владелец)"),
         ]
         group_commands = [
             BotCommand(command="start", description="Открыть меню"),
