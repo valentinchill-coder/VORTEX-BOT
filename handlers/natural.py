@@ -44,7 +44,7 @@ def parse_intent(text: str) -> str | None:
         return "__myrank__"
     if re.search(r"\b(покажи ранги|список рангов|иерархия рангов)\b", value):
         return "__ranks__"
-    if re.search(r"\b(сними ранг|обнули ранг|убери ранг)\b", value):
+    if re.search(r"\b(снять ранг|сними ранг|обнули ранг|убери ранг|сбрось ранг)\b", value):
         return "__rank_remove__"
     if re.search(r"\b(повысить|повышение|подними ранг)\b", value):
         return "__rank_up__"
