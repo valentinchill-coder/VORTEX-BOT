@@ -276,17 +276,23 @@ async def unban(message: Message, bot: Bot, db: Database, owner_ids: frozenset[i
     if not await rank_denial(message, db, bot, owner_ids, "unban"):
         return
     parts = (message.text or "").split(maxsplit=2)
-    if len(parts) < 2 or not parts[1].isdigit():
-        await message.answer("Укажи Telegram ID: /unban 123456789 [причина]")
+    if len(parts) < 2 or not parts[1].startswith("@"):
+        await message.answer("Укажи username: /unban @username [причина]")
         return
     reason = parts[2].strip()[:500] if len(parts) > 2 else "Причина не указана"
+    target_id = await db.find_user_id_by_username(message.chat.id, parts[1])
+    if target_id is None:
+        await message.answer(
+            "Не нашёл однозначного участника по этому username. "
+            "Бот должен был видеть пользователя в группе до блокировки; проверь @username."
+        )
+        return
     if not await bot_can_restrict(message, bot):
         return
     try:
-        target_id = int(parts[1])
         await bot.unban_chat_member(message.chat.id, target_id, only_if_banned=True)
         await db.log_moderation_action(message.chat.id, message.from_user.id, target_id, "unban", reason)
-        await message.answer(f"Блокировка снята. Причина: {escape(reason)}")
+        await message.answer(f"Блокировка пользователя {escape(parts[1])} снята. Причина: {escape(reason)}")
     except TelegramAPIError as exc:
         await message.answer(f"Не удалось разблокировать: {exc.message}")
 
