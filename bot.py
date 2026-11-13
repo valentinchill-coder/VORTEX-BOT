@@ -127,7 +127,7 @@ def create_dispatcher(db: Database, owner_ids: frozenset[int]) -> Dispatcher:
     return dp
 
 
-async def run_webhook(bot: Bot, dp: Dispatcher, settings) -> None:
+async def run_webhook(bot: Bot, dp: Dispatcher, settings, db: Database, owner_ids: frozenset[int]) -> None:
     if not settings.public_url:
         raise RuntimeError(
             "Webhook mode requires PUBLIC_URL or RENDER_EXTERNAL_HOSTNAME."
@@ -159,6 +159,10 @@ async def run_webhook(bot: Bot, dp: Dispatcher, settings) -> None:
             drop_pending_updates=False,
         )
         logging.info("VORTEX BOT webhook is listening at %s", webhook_url)
+        try:
+            await notify_audit_ready(bot, db, owner_ids)
+        except Exception:
+            logging.exception("Readiness notification failed; continuing bot operation")
         await asyncio.Event().wait()
     finally:
         await runner.cleanup()
@@ -179,10 +183,6 @@ async def main():
     await db.connect()
     await initialize_shop(db)
     dp = create_dispatcher(db, settings.owner_ids)
-    try:
-        await notify_audit_ready(bot, db, settings.owner_ids)
-    except Exception:
-        logging.exception("Readiness notification failed; continuing bot startup")
 
     try:
         me = await bot.get_me()
@@ -233,9 +233,13 @@ async def main():
         logging.info("VORTEX BOT starting as @%s in %s mode", me.username, settings.mode)
 
         if settings.mode == "webhook":
-            await run_webhook(bot, dp, settings)
+            await run_webhook(bot, dp, settings, db, settings.owner_ids)
         else:
             await bot.delete_webhook(drop_pending_updates=False)
+            try:
+                await notify_audit_ready(bot, db, settings.owner_ids)
+            except Exception:
+                logging.exception("Readiness notification failed; continuing bot operation")
             await dp.start_polling(
                 bot,
                 allowed_updates=dp.resolve_used_update_types(),
