@@ -22,7 +22,7 @@ def format_quests(progress: dict[str, int], claimed: set[str] | None = None) -> 
     available_reward = 0
     for _quest_id, title, metric, target, reward, description in DAILY_QUESTS:
         value = progress.get(metric, 0)
-        if quest_id in claimed:
+        if _quest_id in claimed:
             state = "🏅 Награда уже получена"
         elif value >= target:
             state = "🎁 Выполнено — забери награду"
