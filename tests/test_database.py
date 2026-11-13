@@ -87,6 +87,15 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(claimed_again, [])
         self.assertEqual(balance_again, 35)
 
+    async def test_recent_warnings_returns_reasons_newest_first(self):
+        await self.db.add_warning(-1001, 20, 10, "flood")
+        await self.db.add_warning(-1001, 20, 11, "advertising")
+        rows = await self.db.recent_warnings(-1001, 20, limit=5)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["admin_id"], 11)
+        self.assertEqual(rows[0]["reason"], "advertising")
+        self.assertEqual(rows[1]["reason"], "flood")
+
     async def test_activity_profile_and_stats(self):
         await self.db.register_message(-1001, 10, "tester", "Test User")
         await self.db.register_message(-1001, 10, "tester", "Test User")
