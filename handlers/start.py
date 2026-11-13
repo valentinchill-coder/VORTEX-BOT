@@ -46,9 +46,10 @@ def main_menu():
     keyboard.button(text="💰 Экономика", callback_data="vortex:economy")
     keyboard.button(text="🛒 Предметы и рынок", callback_data="vortex:shop")
     keyboard.button(text="🎮 Игры", callback_data="vortex:games")
+    keyboard.button(text="📜 Ежедневные задания", callback_data="quests:show")
     keyboard.button(text="👋 Приветствие", callback_data="vortex:welcome")
     keyboard.button(text="📖 Все команды", callback_data="vortex:commands")
-    keyboard.adjust(2, 2, 2, 2, 2, 2)
+    keyboard.adjust(2, 2, 2, 2, 2, 2, 1)
     return keyboard.as_markup()
 
 
