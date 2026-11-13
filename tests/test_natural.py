@@ -1,8 +1,9 @@
 import unittest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 from handlers import economy, games, moderation, profile, shop
 from handlers.natural import parse_intent, _dispatch
+from handlers.ranks import rank_denial
 
 
 class NaturalLanguageIntentTests(unittest.TestCase):
@@ -96,6 +97,26 @@ class NaturalDispatchTests(unittest.IsolatedAsyncioTestCase):
             handler.assert_awaited_once_with(synthetic, db, owner_ids)
         finally:
             profile.profile_command = original
+
+
+class ModerationPermissionAuditTests(unittest.IsolatedAsyncioTestCase):
+    async def test_denied_moderation_attempt_is_written_to_audit(self):
+        message = Mock()
+        message.from_user = Mock(id=123)
+        message.chat = Mock(id=-1001, type="group")
+        message.answer = AsyncMock()
+        db = Mock()
+        db.log_moderation_action = AsyncMock()
+        bot = Mock()
+
+        with patch("handlers.ranks.can_action", new=AsyncMock(return_value=False)):
+            allowed = await rank_denial(message, db, bot, frozenset(), "ban")
+
+        self.assertFalse(allowed)
+        db.log_moderation_action.assert_awaited_once_with(
+            -1001, 123, 0, "permission_denied", "Попытка выполнить действие: ban"
+        )
+        message.answer.assert_awaited_once()
 
 
 if __name__ == "__main__":
