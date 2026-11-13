@@ -11,7 +11,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 
 from config import load_settings
 from database.db import Database
-from handlers import start, moderation, admin, profile, economy, games, shop, natural
+from handlers import start, moderation, admin, profile, economy, games, shop, natural, private_panel
 from middlewares.antiflood import AntiFloodMiddleware
 from handlers.shop import initialize_shop
 
@@ -41,7 +41,7 @@ def create_dispatcher(db: Database, owner_ids: frozenset[int]) -> Dispatcher:
     dp["owner_ids"] = owner_ids
     dp.message.middleware(AntiFloodMiddleware(limit=6, window=8.0))
 
-    dp.include_router(start.router)
+    # Private admin panel must precede the generic /start handler.\n    dp.include_router(private_panel.router)\n    dp.include_router(start.router)
     dp.include_router(moderation.router)
     dp.include_router(admin.router)
     dp.include_router(profile.router)
