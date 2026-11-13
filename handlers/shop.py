@@ -396,6 +396,8 @@ async def _render_inventory(message, db, user_id):
         lines.append(f"{item['name']} × <b>{qty}</b>")
         if item["kind"] == "consumable":
             kb.button(text=f"🍀 Использовать {item['name']}", callback_data=f"shopui:use:{code}")
+        kb.button(text=f"🎁 Подарить {item['name']}", callback_data=f"shopui:gift:{code}")
+        kb.button(text=f"🏷 Продать {item['name']}", callback_data=f"shopui:sell:{code}")
     kb.button(text="🛍 Каталог", callback_data="shopui:catalog")
     kb.button(text="🏪 Рынок", callback_data="shopui:market")
     kb.button(text="⬅️ Назад", callback_data="shopui:home")
@@ -528,3 +530,115 @@ async def shop_ui_callback(query: CallbackQuery, db: Database):
         await query.answer("Неизвестное действие.", show_alert=True)
         return
     await query.answer()
+
+
+# Pending button-driven gift/listing flows. The user replies with ordinary text,
+# never a slash command.
+_pending_shop_action: dict[tuple[int, int], tuple[str, str]] = {}
+
+@router.callback_query(lambda q: q.data and q.data.startswith("shopui:gift:"))
+async def gift_button_callback(query: CallbackQuery):
+    if not query.message or not query.from_user:
+        await query.answer()
+        return
+    code = query.data.split(":")[-1]
+    if code not in ITEMS:
+        await query.answer("Предмет не найден.", show_alert=True)
+        return
+    _pending_shop_action[(query.message.chat.id, query.from_user.id)] = ("gift", code)
+    await query.message.answer(
+        f"🎁 Чтобы подарить {ITEMS[code]['name']}, ответь любым текстом на сообщение получателя. "
+        "Затем отправь количество обычным числом."
+    )
+    await query.answer()
+
+@router.callback_query(lambda q: q.data and q.data.startswith("shopui:sell:"))
+async def sell_button_callback(query: CallbackQuery):
+    if not query.message or not query.from_user:
+        await query.answer()
+        return
+    code = query.data.split(":")[-1]
+    if code not in ITEMS:
+        await query.answer("Предмет не найден.", show_alert=True)
+        return
+    _pending_shop_action[(query.message.chat.id, query.from_user.id)] = ("sell", code)
+    await query.message.answer(
+        f"🏷 Продажа {ITEMS[code]['name']}. Отправь обычным сообщением два числа: количество и цену за штуку. Например: <code>2 150</code>."
+    )
+    await query.answer()
+
+@router.message(lambda m: m.chat.type != ChatType.PRIVATE and m.from_user is not None
+                and (m.chat.id, m.from_user.id) in _pending_shop_action)
+async def handle_shop_plain_input(message: Message, db: Database):
+    if not message.from_user:
+        return
+    key = (message.chat.id, message.from_user.id)
+    action, code = _pending_shop_action.get(key, ("", ""))
+    if action == "gift":
+        recipient_message = message.reply_to_message
+        if not recipient_message or not recipient_message.from_user:
+            await message.answer("Для подарка ответь на сообщение нужного участника.")
+            return
+        recipient = recipient_message.from_user
+        if recipient.is_bot or recipient.id == message.from_user.id:
+            await message.answer("Нельзя подарить предмет себе или боту.")
+            return
+        try:
+            quantity = int((message.text or "").strip())
+        except ValueError:
+            await message.answer("Отправь количество предметов числом, ответив на сообщение получателя.")
+            return
+        if not 1 <= quantity <= 100:
+            await message.answer("Количество должно быть от 1 до 100.")
+            return
+        async with aiosqlite.connect(db.path) as conn:
+            await conn.execute("BEGIN IMMEDIATE")
+            cur = await conn.execute(
+                "SELECT quantity FROM user_items WHERE chat_id=? AND user_id=? AND item_code=?",
+                (message.chat.id, message.from_user.id, code),
+            )
+            row = await cur.fetchone()
+            if not row or int(row[0]) < quantity:
+                await conn.rollback()
+                await message.answer("Недостаточно предметов в инвентаре.")
+                return
+            await conn.execute(
+                "UPDATE user_items SET quantity=quantity-? WHERE chat_id=? AND user_id=? AND item_code=?",
+                (quantity, message.chat.id, message.from_user.id, code),
+            )
+            await _add_item(conn, message.chat.id, recipient.id, code, quantity)
+            await conn.commit()
+        _pending_shop_action.pop(key, None)
+        await message.answer(f"🎁 Подарок отправлен: {ITEMS[code]['name']} ×{quantity} для {escape(recipient.full_name)}.")
+        return
+    if action == "sell":
+        parts = (message.text or "").split()
+        if len(parts) != 2 or not all(part.isdigit() for part in parts):
+            await message.answer("Введи два числа: количество и цену за штуку. Например: <code>2 150</code>.")
+            return
+        quantity, price = map(int, parts)
+        if not 1 <= quantity <= 100 or not 1 <= price <= 1_000_000:
+            await message.answer("Количество должно быть 1–100, цена — 1–1 000 000.")
+            return
+        async with aiosqlite.connect(db.path) as conn:
+            await conn.execute("BEGIN IMMEDIATE")
+            cur = await conn.execute(
+                "SELECT quantity FROM user_items WHERE chat_id=? AND user_id=? AND item_code=?",
+                (message.chat.id, message.from_user.id, code),
+            )
+            row = await cur.fetchone()
+            if not row or int(row[0]) < quantity:
+                await conn.rollback()
+                await message.answer("Недостаточно предметов для продажи.")
+                return
+            await conn.execute(
+                "UPDATE user_items SET quantity=quantity-? WHERE chat_id=? AND user_id=? AND item_code=?",
+                (quantity, message.chat.id, message.from_user.id, code),
+            )
+            await conn.execute(
+                "INSERT INTO market_listings(chat_id,seller_id,item_code,quantity,price_each) VALUES(?,?,?,?,?)",
+                (message.chat.id, message.from_user.id, code, quantity, price),
+            )
+            await conn.commit()
+        _pending_shop_action.pop(key, None)
+        await message.answer(f"🏪 Выставлено: {ITEMS[code]['name']} ×{quantity}, цена {price} V-coins за штуку.")
