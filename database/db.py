@@ -513,6 +513,15 @@ class Database:
             row = await cursor.fetchone() or (0, 0, 0)
             return {"messages": int(row[0]), "games": int(row[1]), "wins": int(row[2])}
 
+    async def claimed_daily_quests(self, chat_id: int, user_id: int) -> set[str]:
+        today = datetime.now(timezone.utc).date().isoformat()
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                "SELECT quest_id FROM daily_quest_claims WHERE chat_id=? AND user_id=? AND day=?",
+                (chat_id, user_id, today),
+            )
+            return {str(row[0]) for row in await cursor.fetchall()}
+
     async def claim_daily_quest_rewards(
         self, chat_id: int, user_id: int, quests: list[tuple[str, str, int, int]]
     ) -> tuple[list[str], int]:
