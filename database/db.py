@@ -219,6 +219,42 @@ class Database:
                 "warnings": int(warns),
             }
 
+    async def achievement_stats(self, chat_id: int, user_id: int) -> dict[str, int]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                "SELECT message_count FROM users WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            user_row = await cursor.fetchone()
+            cursor = await db.execute(
+                "SELECT COUNT(*) FROM reputation WHERE chat_id=? AND target_user_id=?",
+                (chat_id, user_id),
+            )
+            reputation = int((await cursor.fetchone())[0])
+            cursor = await db.execute(
+                "SELECT wins,played FROM game_stats WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            game_row = await cursor.fetchone() or (0, 0)
+            cursor = await db.execute(
+                "SELECT COALESCE(SUM(quantity),0) FROM user_items WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            items = int((await cursor.fetchone())[0])
+            cursor = await db.execute(
+                "SELECT balance FROM wallets WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            wallet_row = await cursor.fetchone()
+            return {
+                "messages": int(user_row[0]) if user_row else 0,
+                "reputation": reputation,
+                "wins": int(game_row[0]),
+                "played": int(game_row[1]),
+                "items": items,
+                "balance": int(wallet_row[0]) if wallet_row else 0,
+            }
+
     async def give_reputation(self, chat_id: int, target_user_id: int, giver_user_id: int) -> bool:
         if target_user_id == giver_user_id:
             return False
