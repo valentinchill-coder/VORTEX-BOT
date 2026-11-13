@@ -3,7 +3,7 @@ from html import escape
 
 from aiogram import Bot, Router
 from aiogram.enums import ChatMemberStatus
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, ChatPermissions
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -203,7 +203,7 @@ async def user_is_admin(bot: Bot, chat_id: int, user_id: int, owner_ids: frozens
     try:
         member = await bot.get_chat_member(chat_id, user_id)
         return member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR)
-    except TelegramBadRequest:
+    except TelegramAPIError:
         return False
 
 
@@ -365,7 +365,7 @@ async def member_action_callback(
             return
         await query.message.answer(result)
         await query.answer("Готово.")
-    except TelegramBadRequest as exc:
+    except TelegramAPIError as exc:
         await query.answer(f"Не удалось выполнить действие: {exc.message}", show_alert=True)
 
 
