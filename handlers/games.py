@@ -51,6 +51,17 @@ def games_keyboard() -> InlineKeyboardMarkup:
     return keyboard.as_markup()
 
 
+def _select_quiz_options(options: list[str], correct_index: int) -> tuple[list[str], int]:
+    """Return one correct and one random incorrect answer, giving blind guesses 50/50 odds."""
+    if not 0 <= correct_index < len(options) or len(options) < 2:
+        raise ValueError("A quiz needs at least two options and a valid correct index.")
+    correct_answer = options[correct_index]
+    wrong_answer = random.choice([option for index, option in enumerate(options) if index != correct_index])
+    displayed_options = [correct_answer, wrong_answer]
+    random.shuffle(displayed_options)
+    return displayed_options, displayed_options.index(correct_answer)
+
+
 def _group_only(message: Message) -> bool:
     return message.chat.type != ChatType.PRIVATE
 
@@ -87,11 +98,7 @@ async def _start_quiz(chat_id: int, user_id: int, send):
     key = (chat_id, user_id)
     nonce = secrets.token_hex(3)
     question, options, correct_index = random.choice(_QUIZ)
-    correct_answer = options[correct_index]
-    wrong_answer = random.choice([option for index, option in enumerate(options) if index != correct_index])
-    displayed_options = [correct_answer, wrong_answer]
-    random.shuffle(displayed_options)
-    correct = displayed_options.index(correct_answer)
+    displayed_options, correct = _select_quiz_options(options, correct_index)
     _quiz_rounds[key] = (nonce, correct)
     keyboard = InlineKeyboardBuilder()
     for index, option in enumerate(displayed_options):
