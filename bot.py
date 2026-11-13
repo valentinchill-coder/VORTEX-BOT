@@ -69,7 +69,13 @@ async def notify_audit_ready(bot: Bot, db: Database, owner_ids: frozenset[int]) 
     failed = 0
     for owner_id in recipients:
         try:
-            await bot.send_message(owner_id, "Все работает и готово к использованию")
+            await bot.send_message(
+                owner_id,
+                "Все работает и готово к использованию\n\n"
+                "Важно: база SQLite на бесплатном Render хранится на временном диске. "
+                "После перезапуска или нового развёртывания данные могут потеряться. "
+                "Для надёжного хранения нужно отдельно настроить постоянное хранилище."
+            )
             delivered += 1
         except Exception:
             failed += 1
