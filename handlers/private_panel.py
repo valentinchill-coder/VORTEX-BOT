@@ -66,6 +66,87 @@ def moderation_keyboard(chat_id: int):
     return kb.as_markup()
 
 
+def profile_groups_keyboard(groups):
+    kb = InlineKeyboardBuilder()
+    for chat_id, title in groups:
+        kb.button(text=f"👤 {title[:45]}", callback_data=f"vp:myprofile:{chat_id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+async def user_profile_groups(db: Database, user_id: int):
+    async with aiosqlite.connect(db.path) as conn:
+        cur = await conn.execute("SELECT DISTINCT chat_id FROM users WHERE user_id=? ORDER BY chat_id DESC", (user_id,))
+        return [int(row[0]) for row in await cur.fetchall()]
+
+
+@router.callback_query(lambda q: q.data == "vp:myprofile")
+async def choose_profile_group(query: CallbackQuery, db: Database):
+    if not query.message or not query.from_user or query.message.chat.type != "private":
+        await query.answer()
+        return
+    groups = []
+    for chat_id in await user_profile_groups(db, query.from_user.id):
+        try:
+            chat = await query.bot.get_chat(chat_id)
+            groups.append((chat_id, chat.title or str(chat_id)))
+        except TelegramBadRequest:
+            continue
+    if groups:
+        await query.message.answer("Выбери группу для просмотра своего профиля:", reply_markup=profile_groups_keyboard(groups))
+    else:
+        await query.message.answer("Пока нет данных профиля. Напиши несколько сообщений в группе, где работает VORTEX.")
+    await query.answer()
+
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:myprofile:"))
+async def show_private_profile(query: CallbackQuery, bot: Bot, db: Database):
+    if not query.message or not query.from_user or query.message.chat.type != "private":
+        await query.answer()
+        return
+    try:
+        chat_id = int(query.data.rsplit(":", 1)[1])
+    except ValueError:
+        await query.answer("Некорректная группа.", show_alert=True)
+        return
+    async with aiosqlite.connect(db.path) as conn:
+        cur = await conn.execute("SELECT 1 FROM users WHERE chat_id=? AND user_id=?", (chat_id, query.from_user.id))
+        if not await cur.fetchone():
+            await query.answer("Профиль не найден.", show_alert=True)
+            return
+        cur = await conn.execute("SELECT points,wins,played FROM game_stats WHERE chat_id=? AND user_id=?", (chat_id, query.from_user.id))
+        game = await cur.fetchone() or (0, 0, 0)
+        cur = await conn.execute("SELECT item_code,quantity FROM user_items WHERE chat_id=? AND user_id=? AND quantity>0 ORDER BY item_code", (chat_id, query.from_user.id))
+        inventory = await cur.fetchall()
+    try:
+        member = await bot.get_chat_member(chat_id, query.from_user.id)
+        if member.status in (ChatMemberStatus.LEFT, ChatMemberStatus.KICKED):
+            await query.answer("Ты больше не состоишь в этой группе.", show_alert=True)
+            return
+        chat = await bot.get_chat(chat_id)
+    except TelegramBadRequest:
+        await query.answer("Не удалось проверить участие в группе.", show_alert=True)
+        return
+    data = await db.get_profile(chat_id, query.from_user.id)
+    user = data["user"] or {}
+    balance = await db.get_balance(chat_id, query.from_user.id)
+    messages = int(user.get("message_count", 0))
+    rank = "🌪 Легенда" if messages >= 1000 else "💎 Ветеран" if messages >= 500 else "🔥 Активный" if messages >= 150 else "⭐ Участник" if messages >= 30 else "🌱 Новичок"
+    from handlers.shop import ITEMS
+    items = [f"{ITEMS.get(code, {}).get('name', code)} ×{qty}" for code, qty in inventory]
+    username = f"@{escape(query.from_user.username)}" if query.from_user.username else "не указан"
+    await query.message.answer(
+        f"👤 <b>Твой профиль VORTEX</b>\\nГруппа: <b>{escape(chat.title or str(chat_id))}</b>\\n\\n"
+        f"Имя: <b>{escape(query.from_user.full_name)}</b>\\nUsername: {username}\\nРанг: {rank}\\n"
+        f"Сообщений: <b>{messages}</b>\\nРепутация: <b>{data['reputation']}</b> ⭐\\n"
+        f"Предупреждений: <b>{data['warnings']}</b>\\n\\n"
+        f"💰 Баланс: <b>{balance} V-coins</b>\\n🎮 Игровые очки: <b>{game[0]}</b>\\n"
+        f"🏆 Побед: <b>{game[1]}</b> из {game[2]} игр\\n"
+        f"🎒 Инвентарь: " + (", ".join(items) if items else "пуст")
+    )
+    await query.answer()
+
+
 @router.message(Command("start"), lambda m: m.chat.type == "private")
 async def private_start(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not message.from_user:
@@ -79,18 +160,15 @@ async def private_start(message: Message, bot: Bot, db: Database, owner_ids: fro
             groups.append((chat_id, chat.title or str(chat_id)))
         except TelegramBadRequest:
             continue
-    if not groups:
-        await message.answer(
-            "🌪 <b>VORTEX — личная панель</b>\n\n"
-            "Я пока не нашёл групп, где у тебя есть права администратора. "
-            "Добавь меня в группу и отправь там несколько сообщений, затем повтори /start. "
-            "Владелец бота имеет доступ к группам, которые бот уже обнаружил."
-        )
-        return
+    kb = InlineKeyboardBuilder()
+    kb.button(text="👤 Мой профиль", callback_data="vp:myprofile")
+    if groups:
+        kb.button(text="🛡 Управление группой", callback_data="vp:groups")
+    kb.adjust(1)
     await message.answer(
-        "🌪 <b>Панель управления VORTEX</b>\n\n"
-        "Выбери беседу. Доступны только группы, где ты администратор, или группы владельца бота.",
-        reply_markup=groups_keyboard(groups),
+        "🌪 <b>VORTEX — личный кабинет</b>\\n\\n"
+        "Профиль доступен каждому участнику. Управление группой отображается только администраторам и владельцу.",
+        reply_markup=kb.as_markup(),
     )
 
 
