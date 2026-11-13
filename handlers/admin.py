@@ -12,9 +12,11 @@ async def stats(message: Message, db: Database):
     if message.chat.type == "private":
         await message.answer("Статистика доступна в группе.")
         return
-    warnings = await db.event_count(message.chat.id, "warn")
+    data = await db.chat_stats(message.chat.id)
     await message.answer(
-        "📊 <b>Статистика VORTEX BOT</b>\n"
-        f"Предупреждений выдано: {warnings}",
-        parse_mode="HTML",
+        "📊 <b>Статистика VORTEX BOT</b>\n\n"
+        f"Участников с активностью: <b>{data['users']}</b>\n"
+        f"Сообщений учтено: <b>{data['messages']}</b>\n"
+        f"Предупреждений выдано: <b>{data['warnings']}</b>\n"
+        f"Срабатываний антифлуда: <b>{data['antiflood']}</b>"
     )
