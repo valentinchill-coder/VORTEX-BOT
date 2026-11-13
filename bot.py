@@ -11,8 +11,9 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 
 from config import load_settings
 from database.db import Database
-from handlers import start, moderation, admin, profile, economy, games
+from handlers import start, moderation, admin, profile, economy, games, shop
 from middlewares.antiflood import AntiFloodMiddleware
+from handlers.shop import initialize_shop
 
 
 WEBHOOK_PATH = "/telegram/webhook"
@@ -46,6 +47,7 @@ def create_dispatcher(db: Database, owner_ids: frozenset[int]) -> Dispatcher:
     dp.include_router(profile.router)
     dp.include_router(economy.router)
     dp.include_router(games.router)
+    dp.include_router(shop.router)
     dp.chat_member.register(
         welcome_new_members,
         ChatMemberUpdatedFilter(JOIN_TRANSITION),
@@ -103,6 +105,7 @@ async def main():
     )
     db = Database(settings.database_path)
     await db.connect()
+    await initialize_shop(db)
     dp = create_dispatcher(db, settings.owner_ids)
 
     try:
@@ -118,6 +121,14 @@ async def main():
             BotCommand(command="daily", description="Получить ежедневную награду"),
             BotCommand(command="pay", description="Перевести V-coins (ответом)"),
             BotCommand(command="exchange", description="Обменять игровые очки на V-coins"),
+            BotCommand(command="shop", description="Открыть магазин предметов"),
+            BotCommand(command="inventory", description="Мой инвентарь"),
+            BotCommand(command="buyitem", description="Купить предмет"),
+            BotCommand(command="useitem", description="Использовать предмет"),
+            BotCommand(command="giftitem", description="Подарить предмет (ответом)"),
+            BotCommand(command="sellitem", description="Выставить предмет на рынок"),
+            BotCommand(command="market", description="Открыть рынок игроков"),
+            BotCommand(command="buylisting", description="Купить лот на рынке"),
             BotCommand(command="topmoney", description="Топ богачей группы"),
             BotCommand(command="games", description="Открыть игровой зал"),
             BotCommand(command="guessgame", description="Начать игру Угадай число"),
