@@ -209,8 +209,14 @@ async def member_action_callback(
     try:
         target_member = await bot.get_chat_member(chat_id, user_id)
         target = target_member.user
-        if target_member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR):
-            await query.answer("Нельзя применять эти действия к администратору.", show_alert=True)
+        if (
+            target_member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR)
+            and action not in ("warn", "clearwarns")
+        ):
+            await query.answer(
+                "Администратора можно предупредить, но ограничить или исключить его через бота нельзя.",
+                show_alert=True,
+            )
             return
 
         if action == "warn":
