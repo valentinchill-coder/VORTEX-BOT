@@ -5,7 +5,13 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import ChatMemberUpdated, BotCommand
+from aiogram.types import (
+    ChatMemberUpdated,
+    BotCommand,
+    BotCommandScopeAllPrivateChats,
+    BotCommandScopeAllGroupChats,
+    BotCommandScopeAllChatAdministrators,
+)
 from aiogram.filters import ChatMemberUpdatedFilter, JOIN_TRANSITION
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
@@ -114,8 +120,13 @@ async def main():
 
     try:
         me = await bot.get_me()
-        await bot.set_my_commands([
-            BotCommand(command="start", description="Открыть главное меню"),
+        private_commands = [
+            BotCommand(command="start", description="Открыть личный кабинет"),
+            BotCommand(command="profile", description="Посмотреть свой профиль"),
+            BotCommand(command="help", description="Помощь"),
+        ]
+        group_commands = [
+            BotCommand(command="start", description="Открыть меню"),
             BotCommand(command="help", description="Помощь и список команд"),
             BotCommand(command="profile", description="Профиль участника (ответом)"),
             BotCommand(command="rep", description="Выдать репутацию (ответом)"),
@@ -131,13 +142,16 @@ async def main():
             BotCommand(command="useitem", description="Использовать предмет"),
             BotCommand(command="giftitem", description="Подарить предмет (ответом)"),
             BotCommand(command="sellitem", description="Выставить предмет на рынок"),
-            BotCommand(command="market", description="Открыть рынок игроков"),
+            BotCommand(command="market", description="Объявления игроков"),
             BotCommand(command="buylisting", description="Купить лот на рынке"),
             BotCommand(command="topmoney", description="Топ богачей группы"),
             BotCommand(command="games", description="Открыть игровой зал"),
             BotCommand(command="guessgame", description="Начать игру Угадай число"),
             BotCommand(command="guess", description="Сделать ход в игре"),
             BotCommand(command="topgames", description="Рейтинг игр группы"),
+            BotCommand(command="stats", description="Статистика группы"),
+        ]
+        admin_commands = group_commands + [
             BotCommand(command="warn", description="Выдать предупреждение (ответом)"),
             BotCommand(command="warnings", description="Посмотреть предупреждения (ответом)"),
             BotCommand(command="clearwarns", description="Очистить предупреждения (ответом)"),
@@ -146,8 +160,10 @@ async def main():
             BotCommand(command="kick", description="Исключить пользователя (ответом)"),
             BotCommand(command="ban", description="Заблокировать пользователя (ответом)"),
             BotCommand(command="unban", description="Разблокировать по ID"),
-            BotCommand(command="stats", description="Статистика группы"),
-        ])
+        ]
+        await bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
+        await bot.set_my_commands(group_commands, scope=BotCommandScopeAllGroupChats())
+        await bot.set_my_commands(admin_commands, scope=BotCommandScopeAllChatAdministrators())
         logging.info("VORTEX BOT starting as @%s in %s mode", me.username, settings.mode)
 
         if settings.mode == "webhook":
