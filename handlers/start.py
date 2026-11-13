@@ -311,8 +311,8 @@ async def member_action_callback(
     if query.message.chat.id != chat_id:
         await query.answer("Это меню относится к другой группе.", show_alert=True)
         return
-    if not await user_is_admin(bot, chat_id, query.from_user.id, owner_ids):
-        await query.answer("Только для администраторов группы.", show_alert=True)
+    if not await can_action(db, bot, chat_id, query.from_user.id, action, owner_ids):
+        await query.answer("Недостаточно прав для этого действия.", show_alert=True)
         return
     if user_id == query.from_user.id:
         await query.answer("Нельзя применить действие к самому себе.", show_alert=True)
