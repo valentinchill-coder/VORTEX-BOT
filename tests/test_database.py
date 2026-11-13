@@ -96,6 +96,29 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rows[0]["reason"], "advertising")
         self.assertEqual(rows[1]["reason"], "flood")
 
+    async def test_warning_expires_and_is_excluded_from_active_count(self):
+        await self.db.add_warning(-1001, 20, 10, "temporary warning")
+        self.assertEqual(await self.db.warning_count(-1001, 20), 1)
+        async with aiosqlite.connect(self.db.path) as conn:
+            await conn.execute(
+                "UPDATE warnings SET expires_at='2000-01-01T00:00:00+00:00' WHERE chat_id=? AND user_id=?",
+                (-1001, 20),
+            )
+            await conn.commit()
+        self.assertEqual(await self.db.warning_count(-1001, 20), 0)
+        rows = await self.db.recent_warnings(-1001, 20)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["reason"], "temporary warning")
+        self.assertIsNone(rows[0]["revoked_at"])
+
+    async def test_clearing_warnings_preserves_audit_history(self):
+        await self.db.add_warning(-1001, 20, 10, "kept in history")
+        await self.db.clear_warnings(-1001, 20)
+        self.assertEqual(await self.db.warning_count(-1001, 20), 0)
+        rows = await self.db.recent_warnings(-1001, 20)
+        self.assertEqual(len(rows), 1)
+        self.assertIsNotNone(rows[0]["revoked_at"])
+
     async def test_activity_profile_and_stats(self):
         await self.db.register_message(-1001, 10, "tester", "Test User")
         await self.db.register_message(-1001, 10, "tester", "Test User")
