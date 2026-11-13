@@ -106,6 +106,12 @@ class Database:
             )
             await db.commit()
 
+    async def backup_to(self, destination: str) -> None:
+        """Create a consistent SQLite snapshot, including committed WAL data."""
+        async with aiosqlite.connect(self.path) as source:
+            async with aiosqlite.connect(destination) as target:
+                await source.backup(target)
+
     async def add_warning(self, chat_id: int, user_id: int, admin_id: int, reason: str) -> int:
         async with aiosqlite.connect(self.path) as db:
             await db.execute(
