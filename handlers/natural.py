@@ -152,8 +152,8 @@ def parse_intent(text: str) -> str | None:
         unit = "m" if unit_word.startswith("мин") else ("h" if unit_word.startswith(("час", "ч")) else "d")
         return f"/mute {duration.group(1)}{unit}"
     if re.search(r"\b(разбань|разбанить|сними бан|unban)\b", value):
-        match = re.search(r"\b(\d{5,})\b", value)
-        return f"/unban {match.group(1)}" if match else "__need_unban_id__"
+        match = re.search(r"@([a-z0-9_]{5,32})", raw, re.I)
+        return f"/unban @{match.group(1)}" if match else "__need_unban_username__"
     if re.search(r"\b(забань|забанить|бан|бань|заблокируй участника|ban)\b", value):
         return "/ban"
     if re.search(r"\b(кикни|кикнуть|кик|исключи участника|удали участника из группы|kick)\b", value):
@@ -245,8 +245,8 @@ async def natural_language_request(message: Message, db: Database, bot, owner_id
     if intent in ("__myrank__", "__ranks__", "__rank_usage__", "__rank_remove__", "__rank_up__", "__rank_down__") or intent.startswith("__rank_set_"):
         await ranks.handle_natural_rank(message, db, bot, owner_ids, intent)
         return
-    if intent == "__need_unban_id__":
-        await message.answer("Напиши Telegram ID в запросе: «Разбань 123456789».")
+    if intent == "__need_unban_username__":
+        await message.answer("Напиши username в запросе: «Разбань @username».")
         return
     if intent.startswith("__game_"):
         if message.chat.type == ChatType.PRIVATE:
