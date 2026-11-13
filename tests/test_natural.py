@@ -34,6 +34,11 @@ class NaturalLanguageIntentTests(unittest.TestCase):
         self.assertEqual(parse_intent("Понизить"), "__rank_down__")
         self.assertEqual(parse_intent("Снять ранг"), "__rank_remove__")
 
+    def test_daily_quest_requests_are_recognized(self):
+        self.assertEqual(parse_intent("Мои задания"), "/quests")
+        self.assertEqual(parse_intent("Задания на сегодня"), "/quests")
+        self.assertEqual(parse_intent("Забрать награды за задания"), "/claimquests")
+
     def test_achievement_request_is_recognized(self):
         self.assertEqual(parse_intent("Покажи достижения"), "/achievements")
         self.assertEqual(parse_intent("Мои достижения"), "/achievements")
