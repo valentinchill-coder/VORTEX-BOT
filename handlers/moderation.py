@@ -228,6 +228,8 @@ async def ban(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int
     target = await target_from_reply(message)
     if not target:
         return
+    if not await bot_can_restrict(message, bot) or not await target_is_restrictable(message, bot, target):
+        return
     try:
         await bot.ban_chat_member(message.chat.id, target.id)
         await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "ban")
