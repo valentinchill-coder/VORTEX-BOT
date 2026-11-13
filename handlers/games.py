@@ -289,6 +289,21 @@ async def top_games_command(message: Message, db: Database):
     await _send_top_games(message, db)
 
 
+# Cancel any active game round for the current user.
+@router.message(Command("cancel"), lambda m: m.chat.type != ChatType.PRIVATE and m.from_user is not None
+                and ((m.chat.id, m.from_user.id) in _guess_games
+                     or (m.chat.id, m.from_user.id) in _rps_rounds
+                     or (m.chat.id, m.from_user.id) in _quiz_rounds))
+async def cancel_game(message: Message):
+    if not message.from_user:
+        return
+    key = (message.chat.id, message.from_user.id)
+    _guess_games.pop(key, None)
+    _rps_rounds.pop(key, None)
+    _quiz_rounds.pop(key, None)
+    await message.answer("Текущая игра отменена.")
+
+
 # Allow the active "guess the number" round to accept a plain numeric message.
 @router.message(lambda m: m.chat.type != ChatType.PRIVATE and m.from_user is not None
                 and (m.chat.id, m.from_user.id) in _guess_games
