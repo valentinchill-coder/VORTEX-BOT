@@ -44,11 +44,12 @@ class AntiFloodMiddleware(BaseMiddleware):
         queue = self.messages[key]
         while queue and now - queue[0] > window:
             queue.popleft()
-        queue.append(now)
+        if settings.get("antiflood_enabled", "1") == "1":
+            queue.append(now)
         self._checks += 1
         if self._checks % 256 == 0:
             for stale_key, stale_queue in list(self.messages.items()):
-                while stale_queue and now - stale_queue[0] > self.window:
+                while stale_queue and now - stale_queue[0] > 60:
                     stale_queue.popleft()
                 if not stale_queue:
                     self.messages.pop(stale_key, None)
