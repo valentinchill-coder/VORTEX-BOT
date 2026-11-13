@@ -14,6 +14,17 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         self.temp_dir.cleanup()
 
+    async def test_moderation_audit_history_is_persisted_and_newest_first(self):
+        await self.db.log_moderation_action(-1001, 10, 20, "warn", "spam")
+        await self.db.log_moderation_action(-1001, 11, 20, "mute", "10m")
+        rows = await self.db.recent_moderation_actions(-1001, limit=10)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["action"], "mute")
+        self.assertEqual(rows[0]["actor_id"], 11)
+        self.assertEqual(rows[0]["target_id"], 20)
+        self.assertEqual(rows[1]["action"], "warn")
+        self.assertEqual(rows[1]["details"], "spam")
+
     async def test_activity_profile_and_stats(self):
         await self.db.register_message(-1001, 10, "tester", "Test User")
         await self.db.register_message(-1001, 10, "tester", "Test User")
