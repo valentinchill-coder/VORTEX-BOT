@@ -13,6 +13,16 @@ class Database:
     async def connect(self) -> None:
         async with aiosqlite.connect(self.path) as db:
             await db.execute("""
+                CREATE TABLE IF NOT EXISTS chat_settings (
+                    chat_id INTEGER NOT NULL,
+                    setting_key TEXT NOT NULL,
+                    setting_value TEXT NOT NULL,
+                    updated_by INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(chat_id, setting_key)
+                )
+            """)
+            await db.execute("""
                 CREATE TABLE IF NOT EXISTS warnings (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     chat_id INTEGER NOT NULL,
@@ -636,3 +646,22 @@ class Database:
                     updated_at=excluded.updated_at
             """, (chat_id, user_id, rank, assigned_by, _now()))
             await db.commit()
+
+
+    async def get_chat_settings(self, chat_id: int) -> dict[str, str]:
+        defaults = {"antiflood_enabled": "1", "antiflood_limit": "6", "antiflood_window": "8"}
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute("SELECT setting_key,setting_value FROM chat_settings WHERE chat_id=?", (chat_id,))
+            for key, value in await cursor.fetchall():
+                if key in defaults:
+                    defaults[key] = str(value)
+        return defaults
+
+    async def set_chat_setting(self, chat_id: int, key: str, value: str, actor_id: int) -> None:
+        allowed = {"antiflood_enabled": {"0", "1"}, "antiflood_limit": {"4", "6", "8", "10"}, "antiflood_window": {"5", "8", "10", "15"}}
+        if key not in allowed or str(value) not in allowed[key]:
+            raise ValueError("Unsupported chat setting.")
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("""INSERT INTO chat_settings(chat_id,setting_key,setting_value,updated_by,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(chat_id,setting_key) DO UPDATE SET setting_value=excluded.setting_value, updated_by=excluded.updated_by, updated_at=excluded.updated_at""", (chat_id, key, str(value), actor_id, _now()))
+            await db.commit()
+        await self.log_moderation_action(chat_id, actor_id, 0, "setting_change", f"{key}={value}")
