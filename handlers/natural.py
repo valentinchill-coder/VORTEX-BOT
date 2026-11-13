@@ -123,6 +123,9 @@ def parse_intent(text: str) -> str | None:
     if match:
         return f"/cancel_listing {match.group(1)}"
 
+    if re.search(r"\\b(журнал модерации|история модерации|последние действия модераторов)\\b", value):
+        return "/audit"
+
     # Moderation. These actions still go through the existing admin permission checks.
     if re.search(r"\b(выдай предупреждение|предупреди участника|предупреждение пользователю)\b", value):
         reason = re.sub(r"^.*?(?:выдай предупреждение|предупреди участника|предупреждение пользователю)\s*", "", raw, flags=re.I).strip()
@@ -182,6 +185,7 @@ async def _dispatch(message: Message, command_text: str, db: Database, bot, owne
         "/kick": lambda: moderation.kick(synthetic, bot, db, owner_ids),
         "/ban": lambda: moderation.ban(synthetic, bot, db, owner_ids),
         "/unban": lambda: moderation.unban(synthetic, bot, db, owner_ids),
+        "/audit": lambda: moderation.audit_command(synthetic, bot, db, owner_ids),
     }
     handler = handlers.get(command)
     if handler:
