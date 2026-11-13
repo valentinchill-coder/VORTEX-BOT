@@ -136,7 +136,7 @@ async def show_private_profile(query: CallbackQuery, bot: Bot, db: Database):
     items = [f"{ITEMS.get(code, {}).get('name', code)} ×{qty}" for code, qty in inventory]
     username = f"@{escape(query.from_user.username)}" if query.from_user.username else "не указан"
     await query.message.answer(
-        f"👤 <b>Твой профиль VORTEX</b>\\nГруппа: <b>{escape(chat.title or str(chat_id))}</b>\\n\\n"
+        f"👤 <b>Твой профиль VORTEX</b>\nГруппа: <b>{escape(chat.title or str(chat_id))}</b>\\n\\n"
         f"Имя: <b>{escape(query.from_user.full_name)}</b>\\nUsername: {username}\\nРанг: {rank}\\n"
         f"Сообщений: <b>{messages}</b>\\nРепутация: <b>{data['reputation']}</b> ⭐\\n"
         f"Предупреждений: <b>{data['warnings']}</b>\\n\\n"
@@ -251,7 +251,11 @@ async def group_stats(query: CallbackQuery, bot: Bot, db: Database, owner_ids: f
     if not query.message or not query.from_user or query.message.chat.type != "private":
         await query.answer()
         return
-    chat_id = int(query.data.rsplit(":", 1)[1])
+    try:
+        chat_id = int(query.data.rsplit(":", 1)[1])
+    except (ValueError, IndexError):
+        await query.answer("Некорректная группа.", show_alert=True)
+        return
     if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
         await query.answer("Доступ запрещён.", show_alert=True)
         return
@@ -272,7 +276,11 @@ async def group_top(query: CallbackQuery, bot: Bot, db: Database, owner_ids: fro
     if not query.message or not query.from_user or query.message.chat.type != "private":
         await query.answer()
         return
-    chat_id = int(query.data.rsplit(":", 1)[1])
+    try:
+        chat_id = int(query.data.rsplit(":", 1)[1])
+    except (ValueError, IndexError):
+        await query.answer("Некорректная группа.", show_alert=True)
+        return
     if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
         await query.answer("Доступ запрещён.", show_alert=True)
         return
@@ -297,7 +305,11 @@ async def moderation_menu(query: CallbackQuery, bot: Bot, owner_ids: frozenset[i
     if not query.message or not query.from_user or query.message.chat.type != "private":
         await query.answer()
         return
-    chat_id = int(query.data.rsplit(":", 1)[1])
+    try:
+        chat_id = int(query.data.rsplit(":", 1)[1])
+    except (ValueError, IndexError):
+        await query.answer("Некорректная группа.", show_alert=True)
+        return
     if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
         await query.answer("Доступ запрещён.", show_alert=True)
         return
@@ -315,8 +327,20 @@ async def choose_action(query: CallbackQuery, bot: Bot, owner_ids: frozenset[int
     if not query.message or not query.from_user or query.message.chat.type != "private":
         await query.answer()
         return
-    _, _, action, chat_id_raw = query.data.split(":")
-    chat_id = int(chat_id_raw)
+    parts = query.data.split(":")
+    if len(parts) != 4:
+        await query.answer("Некорректное действие.", show_alert=True)
+        return
+    _, _, action, chat_id_raw = parts
+    allowed_actions = {"warn", "mute", "unmute", "kick", "ban", "clearwarns"}
+    if action not in allowed_actions:
+        await query.answer("Неизвестное действие.", show_alert=True)
+        return
+    try:
+        chat_id = int(chat_id_raw)
+    except ValueError:
+        await query.answer("Некорректная группа.", show_alert=True)
+        return
     if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
         await query.answer("Доступ запрещён.", show_alert=True)
         return
@@ -352,11 +376,18 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
         await message.answer("Нужен числовой Telegram ID. Для отмены /cancel.")
         return
     user_id = int(raw)
+    if user_id <= 0:
+        await message.answer("Укажи корректный положительный Telegram ID.")
+        return
     if user_id == message.from_user.id:
         await message.answer("Нельзя применить действие к самому себе.")
         return
     try:
         target = await bot.get_chat_member(chat_id, user_id)
+        if target.user.is_bot:
+            await message.answer("Нельзя применять действия к ботам.")
+            pending_action.pop(message.from_user.id, None)
+            return
         if target.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR) and action not in ("warn", "clearwarns"):
             await message.answer("Нельзя ограничивать или исключать администратора группы.")
             pending_action.pop(message.from_user.id, None)
