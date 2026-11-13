@@ -361,6 +361,39 @@ async def buy_listing_command(message: Message, db: Database):
     )
 
 
+@router.message(Command("cancel_listing"))
+async def cancel_listing_command(message: Message, db: Database):
+    if not _group(message) or not message.from_user:
+        await message.answer("Управление объявлениями доступно в группе.")
+        return
+    args = _args(message)
+    if len(args) != 1 or not args[0].isdigit() or int(args[0]) <= 0:
+        await message.answer("Формат: /cancel_listing 12. Снять можно только собственное объявление.")
+        return
+    listing_id = int(args[0])
+    async with aiosqlite.connect(db.path) as conn:
+        await conn.execute("BEGIN IMMEDIATE")
+        cur = await conn.execute(
+            "SELECT item_code,quantity FROM market_listings "
+            "WHERE id=? AND chat_id=? AND seller_id=?",
+            (listing_id, message.chat.id, message.from_user.id),
+        )
+        row = await cur.fetchone()
+        if not row:
+            await conn.rollback()
+            await message.answer("Собственное объявление не найдено.")
+            return
+        code, quantity = row[0], int(row[1])
+        await conn.execute(
+            "DELETE FROM market_listings WHERE id=? AND chat_id=? AND seller_id=?",
+            (listing_id, message.chat.id, message.from_user.id),
+        )
+        await _add_item(conn, message.chat.id, message.from_user.id, code, quantity)
+        await conn.commit()
+    item_name = ITEMS.get(code, {}).get("name", code)
+    await message.answer(f"↩️ Объявление №{listing_id} снято. Возвращено в инвентарь: {item_name} ×{quantity}.")
+
+
 # Button-driven shop UI. Users can browse, buy, use and purchase market listings
 # without typing bot commands.
 from aiogram.types import CallbackQuery
@@ -490,10 +523,35 @@ async def shop_ui_callback(query: CallbackQuery, db: Database):
             lines.append(f"№{listing_id} · {label} ×{qty} · {price} за шт.")
             if seller_id != query.from_user.id:
                 kb.button(text=f"Купить лот №{listing_id}", callback_data=f"shopui:listing:{listing_id}")
+            else:
+                kb.button(text=f"↩️ Снять свой лот №{listing_id}", callback_data=f"shopui:cancel:{listing_id}")
         kb.button(text="🛍 Каталог", callback_data="shopui:catalog")
         kb.button(text="⬅️ Назад", callback_data="shopui:home")
         kb.adjust(1)
         await query.message.answer("\n".join(lines), reply_markup=kb.as_markup())
+    elif action == "cancel" and len(parts) == 3 and parts[2].isdigit():
+        listing_id = int(parts[2])
+        async with aiosqlite.connect(db.path) as conn:
+            await conn.execute("BEGIN IMMEDIATE")
+            cur = await conn.execute(
+                "SELECT item_code,quantity FROM market_listings "
+                "WHERE id=? AND chat_id=? AND seller_id=?",
+                (listing_id, query.message.chat.id, query.from_user.id),
+            )
+            row = await cur.fetchone()
+            if not row:
+                await conn.rollback()
+                await query.answer("Собственное объявление не найдено.", show_alert=True)
+                return
+            code, qty = row[0], int(row[1])
+            await conn.execute(
+                "DELETE FROM market_listings WHERE id=? AND chat_id=? AND seller_id=?",
+                (listing_id, query.message.chat.id, query.from_user.id),
+            )
+            await _add_item(conn, query.message.chat.id, query.from_user.id, code, qty)
+            await conn.commit()
+        item_name = ITEMS.get(code, {}).get("name", code)
+        await query.message.answer(f"↩️ Лот №{listing_id} снят. Возвращено: {item_name} ×{qty}.")
     elif action == "listing" and len(parts) == 3 and parts[2].isdigit():
         listing_id = int(parts[2])
         async with aiosqlite.connect(db.path) as conn:
