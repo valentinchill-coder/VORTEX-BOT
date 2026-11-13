@@ -95,6 +95,27 @@ class Database:
                     PRIMARY KEY (chat_id, user_id)
                 )
             """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS daily_activity (
+                    chat_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    day TEXT NOT NULL,
+                    messages INTEGER NOT NULL DEFAULT 0,
+                    games INTEGER NOT NULL DEFAULT 0,
+                    wins INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(chat_id,user_id,day)
+                )
+            """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS daily_quest_claims (
+                    chat_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    day TEXT NOT NULL,
+                    quest_id TEXT NOT NULL,
+                    reward INTEGER NOT NULL,
+                    PRIMARY KEY(chat_id,user_id,day,quest_id)
+                )
+            """)
             await db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_game_points ON game_stats(chat_id, points DESC)"
             )
@@ -193,6 +214,12 @@ class Database:
                     message_count=users.message_count+1,
                     last_seen=excluded.last_seen
             """, (chat_id, user_id, username, full_name, now, now))
+            await db.execute("""
+                INSERT INTO daily_activity(chat_id,user_id,day,messages)
+                VALUES(?,?,?,1)
+                ON CONFLICT(chat_id,user_id,day) DO UPDATE SET
+                    messages=daily_activity.messages+1
+            """, (chat_id, user_id, now[:10]))
             await db.commit()
 
     async def get_profile(self, chat_id: int, user_id: int) -> dict:
@@ -405,6 +432,13 @@ class Database:
                     wins=game_stats.wins+excluded.wins,
                     played=game_stats.played+1
             """, (chat_id, user_id, points, int(won)))
+            await db.execute("""
+                INSERT INTO daily_activity(chat_id,user_id,day,games,wins)
+                VALUES(?,?,?,1,?)
+                ON CONFLICT(chat_id,user_id,day) DO UPDATE SET
+                    games=daily_activity.games+1,
+                    wins=daily_activity.wins+excluded.wins
+            """, (chat_id, user_id, _now()[:10], int(won)))
             cursor = await db.execute(
                 "SELECT points,wins,played FROM game_stats WHERE chat_id=? AND user_id=?",
                 (chat_id, user_id),
@@ -468,6 +502,56 @@ class Database:
                 for row in await cursor.fetchall()
             ]
 
+
+    async def daily_quest_progress(self, chat_id: int, user_id: int) -> dict[str, int]:
+        today = datetime.now(timezone.utc).date().isoformat()
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                "SELECT messages,games,wins FROM daily_activity WHERE chat_id=? AND user_id=? AND day=?",
+                (chat_id, user_id, today),
+            )
+            row = await cursor.fetchone() or (0, 0, 0)
+            return {"messages": int(row[0]), "games": int(row[1]), "wins": int(row[2])}
+
+    async def claim_daily_quest_rewards(
+        self, chat_id: int, user_id: int, quests: list[tuple[str, str, int, int]]
+    ) -> tuple[list[str], int]:
+        today = datetime.now(timezone.utc).date().isoformat()
+        claimed: list[str] = []
+        total_reward = 0
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("BEGIN IMMEDIATE")
+            cursor = await db.execute(
+                "SELECT messages,games,wins FROM daily_activity WHERE chat_id=? AND user_id=? AND day=?",
+                (chat_id, user_id, today),
+            )
+            row = await cursor.fetchone() or (0, 0, 0)
+            progress = {"messages": int(row[0]), "games": int(row[1]), "wins": int(row[2])}
+            for quest_id, metric, target, reward in quests:
+                if reward <= 0 or target <= 0 or progress.get(metric, 0) < target:
+                    continue
+                cursor = await db.execute(
+                    """INSERT OR IGNORE INTO daily_quest_claims(chat_id,user_id,day,quest_id,reward)
+                       VALUES(?,?,?,?,?)""",
+                    (chat_id, user_id, today, quest_id, reward),
+                )
+                if cursor.rowcount == 1:
+                    claimed.append(quest_id)
+                    total_reward += reward
+            if total_reward:
+                await db.execute("""
+                    INSERT INTO wallets(chat_id,user_id,balance) VALUES(?,?,?)
+                    ON CONFLICT(chat_id,user_id) DO UPDATE SET
+                        balance=wallets.balance+excluded.balance
+                """, (chat_id, user_id, total_reward))
+            cursor = await db.execute(
+                "SELECT balance FROM wallets WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            balance_row = await cursor.fetchone()
+            balance = int(balance_row[0]) if balance_row else 0
+            await db.commit()
+        return claimed, balance
 
     async def get_moderation_rank(self, chat_id: int, user_id: int) -> int:
         async with aiosqlite.connect(self.path) as db:
