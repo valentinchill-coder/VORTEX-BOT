@@ -32,6 +32,7 @@ async def _safe_query_answer(query: CallbackQuery, *args, **kwargs) -> None:
 
 pending_action: dict[int, tuple[int, str]] = {}
 pending_filter_input: dict[int, int] = {}
+pending_rank_target: dict[int, int] = {}
 
 
 async def allowed(bot: Bot, user_id: int, chat_id: int, owner_ids: frozenset[int]) -> bool:
@@ -66,6 +67,7 @@ def group_keyboard(chat_id: int):
     kb.button(text="⚙️ Настройки защиты", callback_data=f"vp:settings:{chat_id}")
     kb.button(text="📋 Журнал действий", callback_data=f"vp:audit:{chat_id}")
     kb.button(text="🚫 Фильтры сообщений", callback_data=f"vp:filters:{chat_id}")
+    kb.button(text="👑 Ранги модераторов", callback_data=f"vp:ranks:{chat_id}")
     kb.button(text="🔄 Обновить", callback_data=f"vp:group:{chat_id}")
     kb.button(text="⬅️ К списку групп", callback_data="vp:groups")
     kb.adjust(1)
@@ -390,6 +392,7 @@ async def cancel_action(message: Message):
     if message.from_user:
         pending_action.pop(message.from_user.id, None)
         pending_filter_input.pop(message.from_user.id, None)
+        pending_rank_target.pop(message.from_user.id, None)
     await message.answer("Действие отменено.")
 
 
@@ -697,3 +700,158 @@ async def save_filter_word(message: Message, bot: Bot, db: Database, owner_ids: 
         return
     pending_filter_input.pop(message.from_user.id, None)
     await message.answer("Фраза добавлена в список." if added else "Такая фраза уже есть.")
+
+
+
+async def _rank_actor_level(bot: Bot, user_id: int, chat_id: int, owner_ids: frozenset[int], db: Database) -> int:
+    if user_id in owner_ids:
+        return 7
+    try:
+        member = await bot.get_chat_member(chat_id, user_id)
+        if member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR):
+            return 6
+    except TelegramAPIError:
+        return 0
+    return await db.get_moderation_rank(chat_id, user_id)
+
+
+async def _render_rank_panel(query: CallbackQuery, chat_id: int, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not query.message or not query.from_user or query.message.chat.type != "private":
+        return
+    actor_rank = await _rank_actor_level(bot, query.from_user.id, chat_id, owner_ids, db)
+    if actor_rank < 5:
+        await _safe_query_answer(query, "Управлять рангами может главный модератор или администратор группы.", show_alert=True)
+        return
+    async with aiosqlite.connect(db.path) as conn:
+        cur = await conn.execute("SELECT user_id, rank FROM moderation_ranks WHERE chat_id=? ORDER BY rank DESC, updated_at DESC LIMIT 30", (chat_id,))
+        assigned = await cur.fetchall()
+    lines = ["👑 <b>Ранги модераторов</b>", "", "Назначенные ранги:"]
+    if assigned:
+        for uid, rank in assigned:
+            try:
+                member = await bot.get_chat_member(chat_id, int(uid))
+                display = escape(member.user.full_name)
+            except TelegramAPIError:
+                display = f"ID {uid}"
+            lines.append(f"• {display} — ранг <b>{rank}</b>")
+    else:
+        lines.append("Пока никому не назначены.")
+    lines.extend(["", "Главный модератор назначает ранги 1–3.", "Администратор группы и владелец могут назначать ранги 1–5."])
+    kb = InlineKeyboardBuilder()
+    kb.button(text="➕ Назначить / изменить ранг", callback_data=f"vp:rankadd:{chat_id}")
+    kb.button(text="⬅️ Назад", callback_data=f"vp:group:{chat_id}")
+    kb.adjust(1)
+    await _safe_edit(query.message, "\n".join(lines), reply_markup=kb.as_markup())
+
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:ranks:"))
+async def show_rank_panel(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    try:
+        chat_id = int(query.data.rsplit(":", 1)[1])
+    except (ValueError, IndexError):
+        await _safe_query_answer(query, "Некорректная группа.", show_alert=True)
+        return
+    await _render_rank_panel(query, chat_id, bot, db, owner_ids)
+    await _safe_query_answer(query)
+
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:rankadd:"))
+async def begin_rank_assignment(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not query.from_user or not query.message or query.message.chat.type != "private":
+        await _safe_query_answer(query)
+        return
+    try:
+        chat_id = int(query.data.rsplit(":", 1)[1])
+    except ValueError:
+        await _safe_query_answer(query, "Некорректная группа.", show_alert=True)
+        return
+    actor_rank = await _rank_actor_level(bot, query.from_user.id, chat_id, owner_ids, db)
+    if actor_rank < 5:
+        await _safe_query_answer(query, "Недостаточно прав.", show_alert=True)
+        return
+    pending_rank_target[query.from_user.id] = chat_id
+    await query.message.answer("Отправь Telegram ID участника группы, которому нужно назначить или изменить ранг. Отмена: /cancel")
+    await _safe_query_answer(query)
+
+
+@router.message(lambda m: m.chat.type == "private" and m.from_user and m.from_user.id in pending_rank_target and not (m.text or "").startswith("/"))
+async def receive_rank_target(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not message.from_user:
+        return
+    chat_id = pending_rank_target.get(message.from_user.id)
+    if chat_id is None:
+        return
+    actor_rank = await _rank_actor_level(bot, message.from_user.id, chat_id, owner_ids, db)
+    if actor_rank < 5:
+        pending_rank_target.pop(message.from_user.id, None)
+        await message.answer("Доступ отозван. Операция отменена.")
+        return
+    raw = (message.text or "").strip()
+    if not raw.isdigit():
+        await message.answer("Нужен числовой Telegram ID. Попробуй ещё раз или /cancel.")
+        return
+    target_id = int(raw)
+    if target_id <= 0:
+        await message.answer("Некорректный ID.")
+        return
+    try:
+        member = await bot.get_chat_member(chat_id, target_id)
+    except TelegramAPIError:
+        await message.answer("Не удалось найти участника в этой группе. Проверь ID.")
+        return
+    if member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR) or target_id in owner_ids or member.user.is_bot:
+        await message.answer("Нельзя назначать внутренний ранг администратору Telegram, владельцу или боту.")
+        return
+    current = await db.get_moderation_rank(chat_id, target_id)
+    if current >= actor_rank:
+        await message.answer("Нельзя менять ранг равного или старшего по иерархии.")
+        return
+    pending_rank_target.pop(message.from_user.id, None)
+    kb = InlineKeyboardBuilder()
+    max_rank = 3 if actor_rank == 5 else 5
+    for rank in range(1, max_rank + 1):
+        kb.button(text=f"{rank} — {['','Стажёр','Младший модератор','Модератор','Старший модератор','Главный модератор'][rank]}", callback_data=f"vp:rankset:{chat_id}:{target_id}:{rank}")
+    if current:
+        kb.button(text="Снять ранг", callback_data=f"vp:rankset:{chat_id}:{target_id}:0")
+    kb.button(text="Отмена", callback_data=f"vp:ranks:{chat_id}")
+    kb.adjust(1)
+    await message.answer(f"Участник: <b>{escape(member.user.full_name)}</b>\nТекущий ранг: {current}\nВыбери новый ранг:", reply_markup=kb.as_markup())
+
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:rankset:"))
+async def apply_rank_assignment(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not query.from_user or not query.message or query.message.chat.type != "private":
+        await _safe_query_answer(query)
+        return
+    parts = query.data.split(":")
+    if len(parts) != 5:
+        await _safe_query_answer(query, "Некорректное действие.", show_alert=True)
+        return
+    try:
+        chat_id, target_id, new_rank = map(int, parts[2:])
+    except ValueError:
+        await _safe_query_answer(query, "Некорректные данные.", show_alert=True)
+        return
+    actor_rank = await _rank_actor_level(bot, query.from_user.id, chat_id, owner_ids, db)
+    if actor_rank < 5 or not 0 <= new_rank <= (3 if actor_rank == 5 else 5):
+        await _safe_query_answer(query, "Недостаточно прав или неверный ранг.", show_alert=True)
+        return
+    try:
+        member = await bot.get_chat_member(chat_id, target_id)
+    except TelegramAPIError:
+        await _safe_query_answer(query, "Участник больше не состоит в группе.", show_alert=True)
+        return
+    if member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR) or target_id in owner_ids or member.user.is_bot:
+        await _safe_query_answer(query, "Нельзя менять ранг этому участнику.", show_alert=True)
+        return
+    current = await db.get_moderation_rank(chat_id, target_id)
+    if current >= actor_rank or new_rank >= actor_rank:
+        await _safe_query_answer(query, "Нельзя менять равный или старший ранг.", show_alert=True)
+        return
+    if current == new_rank:
+        await _safe_query_answer(query, "Этот ранг уже установлен.", show_alert=True)
+        return
+    await db.set_moderation_rank(chat_id, target_id, new_rank, query.from_user.id)
+    await db.log_moderation_action(chat_id, query.from_user.id, target_id, "rank_change", f"{current} -> {new_rank}")
+    await _render_rank_panel(query, chat_id, bot, db, owner_ids)
+    await _safe_query_answer(query, "Ранг обновлён.")
