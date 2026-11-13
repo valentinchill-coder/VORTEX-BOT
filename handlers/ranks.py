@@ -62,6 +62,9 @@ async def handle_natural_rank(message: Message, db: Database, bot: Bot,
     if not message.from_user or message.chat.type == "private":
         await message.answer("Управление рангами доступно только в группе.")
         return
+    if intent == "__rank_usage__":
+        await message.answer("Чтобы выдать ранг, ответь на сообщение участника фразой «Выдать ранг 2». Для повышения или понижения достаточно написать «Повысить» или «Понизить» ответом на его сообщение. «Снять ранг» убирает назначенный ранг.")
+        return
     if intent == "__myrank__":
         rank = await get_rank(db, bot, message.chat.id, message.from_user.id, owner_ids)
         name, description = RANKS[rank]
