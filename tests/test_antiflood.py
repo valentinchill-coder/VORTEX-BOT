@@ -32,6 +32,9 @@ class AntiFloodActivityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(handler.await_count, 6)
         db.add_warning.assert_awaited_once()
         db.log_event.assert_awaited_once_with(-1001, "antiflood")
+        db.log_moderation_action.assert_awaited_once_with(
+            -1001, 0, 10, "antiflood_warn", "limit=6; window=8s; warnings=1"
+        )
         delete.assert_awaited_once()
 
 
