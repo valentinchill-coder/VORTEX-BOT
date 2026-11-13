@@ -59,6 +59,38 @@ def back_menu():
     keyboard = InlineKeyboardBuilder()
     keyboard.button(text="⬅️ В главное меню", callback_data="vortex:home")
     return keyboard.as_markup()
+\n
+def economy_section_keyboard():
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="💰 Мой баланс", callback_data="eco:balance")
+    keyboard.button(text="🎁 Ежедневная награда", callback_data="eco:daily")
+    keyboard.button(text="💸 Перевести монеты", callback_data="eco:transfer")
+    keyboard.button(text="💱 Обменять игровые очки", callback_data="eco:exchange")
+    keyboard.button(text="🏆 Топ богачей", callback_data="eco:top")
+    keyboard.button(text="⬅️ В главное меню", callback_data="vortex:home")
+    keyboard.adjust(1)
+    return keyboard.as_markup()
+
+
+def profile_section_keyboard():
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="👤 Мой профиль", callback_data="profile:me")
+    keyboard.button(text="⭐ Выдать репутацию", callback_data="profile:give")
+    keyboard.button(text="🏆 Топ репутации", callback_data="profile:toprep")
+    keyboard.button(text="📈 Топ активности", callback_data="profile:topactivity")
+    keyboard.button(text="⬅️ В главное меню", callback_data="vortex:home")
+    keyboard.adjust(1)
+    return keyboard.as_markup()
+
+
+def stats_section_keyboard():
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="📈 Топ активности", callback_data="profile:topactivity")
+    keyboard.button(text="🏆 Топ репутации", callback_data="profile:toprep")
+    keyboard.button(text="⬅️ В главное меню", callback_data="vortex:home")
+    keyboard.adjust(1)
+    return keyboard.as_markup()
+
 
 
 def member_actions(chat_id: int, user_id: int):
@@ -379,6 +411,29 @@ async def menu_callback(query: CallbackQuery, db: Database):
             "/buylisting 12 — купить лот целиком\n\n"
             "С продавца удерживается комиссия 5%. Предметы резервируются до продажи.",
             reply_markup=shop_menu(),
+        )
+    elif section == "economy":
+        await query.message.edit_text(
+            "💰 <b>Экономика VORTEX</b>\\n\\n"
+            "Управляй монетами кнопками ниже. Для перевода выбери кнопку и ответь суммой на сообщение получателя. "
+            "Для обмена очков просто введи количество после нажатия кнопки.",
+            reply_markup=economy_section_keyboard(),
+        )
+    elif section in ("profile", "reputation"):
+        await query.message.edit_text(
+            "👤 <b>Профиль и репутация</b>\\n\\n"
+            "Просматривай профиль, рейтинги и выдавай репутацию через кнопки.",
+            reply_markup=profile_section_keyboard(),
+        )
+    elif section == "stats":
+        data = await db.chat_stats(query.message.chat.id)
+        await query.message.edit_text(
+            "📊 <b>Статистика группы</b>\\n\\n"
+            f"Участников в базе: <b>{data['users']}</b>\\n"
+            f"Сообщений: <b>{data['messages']}</b>\\n"
+            f"Предупреждений: <b>{data['warnings']}</b>\\n"
+            f"Срабатываний антифлуда: <b>{data['antiflood']}</b>",
+            reply_markup=stats_section_keyboard(),
         )
     elif section in MENU_TEXT:
         await query.message.edit_text(MENU_TEXT[section], reply_markup=back_menu())
