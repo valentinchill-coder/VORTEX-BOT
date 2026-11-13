@@ -62,6 +62,7 @@ def group_keyboard(chat_id: int):
     kb.button(text="📊 Статистика", callback_data=f"vp:stats:{chat_id}")
     kb.button(text="🏆 Активные участники", callback_data=f"vp:top:{chat_id}")
     kb.button(text="🛡 Модерация", callback_data=f"vp:mod:{chat_id}")
+    kb.button(text="⚙️ Настройки защиты", callback_data=f"vp:settings:{chat_id}")
     kb.button(text="🔄 Обновить", callback_data=f"vp:group:{chat_id}")
     kb.button(text="⬅️ К списку групп", callback_data="vp:groups")
     kb.adjust(1)
@@ -467,3 +468,69 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
             pass
     except TelegramAPIError as exc:
         await message.answer(f"Не удалось выполнить действие: {escape(exc.message)}")
+
+
+async def _render_group_settings(query: CallbackQuery, chat_id: int, db: Database, bot: Bot, owner_ids: frozenset[int]):
+    if not query.message or not query.from_user or query.message.chat.type != "private":
+        await _safe_query_answer(query)
+        return
+    if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+        await _safe_query_answer(query, "Доступ запрещён.", show_alert=True)
+        return
+    settings = await db.get_chat_settings(chat_id)
+    enabled = settings["antiflood_enabled"] == "1"
+    limit = int(settings["antiflood_limit"])
+    window = int(settings["antiflood_window"])
+    kb = InlineKeyboardBuilder()
+    kb.button(text=f"Антифлуд: {'ВКЛ' if enabled else 'ВЫКЛ'}", callback_data=f"vp:setting:{chat_id}:antiflood_enabled")
+    kb.button(text=f"Лимит: {limit} сообщ.", callback_data=f"vp:setting:{chat_id}:antiflood_limit")
+    kb.button(text=f"Окно: {window} сек.", callback_data=f"vp:setting:{chat_id}:antiflood_window")
+    kb.button(text="⬅️ Назад", callback_data=f"vp:group:{chat_id}")
+    kb.adjust(1)
+    await _safe_edit(query.message,
+        "⚙️ <b>Настройки защиты группы</b>\\n\\n"
+        f"Антифлуд: <b>{'включён' if enabled else 'выключен'}</b>\\n"
+        f"Лимит: <b>{limit} сообщений</b> за <b>{window} секунд</b>\\n\\n"
+        "Нажимай на параметры для переключения. Настройки сохраняются отдельно для каждой группы.",
+        reply_markup=kb.as_markup(),
+    )
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:settings:"))
+async def show_group_settings(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    try:
+        chat_id = int(query.data.rsplit(":", 1)[1])
+    except (ValueError, IndexError):
+        await _safe_query_answer(query, "Некорректная группа.", show_alert=True)
+        return
+    await _render_group_settings(query, chat_id, db, bot, owner_ids)
+    await _safe_query_answer(query)
+
+@router.callback_query(lambda q: q.data and q.data.startswith("vp:setting:"))
+async def update_group_setting(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
+    if not query.from_user or not query.message or query.message.chat.type != "private":
+        await _safe_query_answer(query)
+        return
+    parts = query.data.split(":")
+    if len(parts) != 4:
+        await _safe_query_answer(query, "Некорректная настройка.", show_alert=True)
+        return
+    try:
+        chat_id = int(parts[2])
+    except ValueError:
+        await _safe_query_answer(query, "Некорректная группа.", show_alert=True)
+        return
+    key = parts[3]
+    if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
+        await _safe_query_answer(query, "Доступ запрещён.", show_alert=True)
+        return
+    settings = await db.get_chat_settings(chat_id)
+    cycles = {"antiflood_enabled": ["1", "0"], "antiflood_limit": ["4", "6", "8", "10"], "antiflood_window": ["5", "8", "10", "15"]}
+    if key not in cycles:
+        await _safe_query_answer(query, "Неизвестная настройка.", show_alert=True)
+        return
+    values = cycles[key]
+    current = settings[key]
+    next_value = values[(values.index(current) + 1) % len(values)] if current in values else values[0]
+    await db.set_chat_setting(chat_id, key, next_value, query.from_user.id)
+    await _render_group_settings(query, chat_id, db, bot, owner_ids)
+    await _safe_query_answer(query, "Настройка сохранена.")
