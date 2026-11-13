@@ -221,5 +221,17 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(leaders), 2)
 
 
+    async def test_chat_settings_are_persistent_and_validated(self):
+        defaults = await self.db.get_chat_settings(-1001)
+        self.assertEqual(defaults, {"antiflood_enabled": "1", "antiflood_limit": "6", "antiflood_window": "8"})
+        await self.db.set_chat_setting(-1001, "antiflood_enabled", "0", 99)
+        await self.db.set_chat_setting(-1001, "antiflood_limit", "10", 99)
+        await self.db.set_chat_setting(-1001, "antiflood_window", "15", 99)
+        settings = await self.db.get_chat_settings(-1001)
+        self.assertEqual(settings, {"antiflood_enabled": "0", "antiflood_limit": "10", "antiflood_window": "15"})
+        self.assertEqual((await self.db.get_chat_settings(-1002))["antiflood_enabled"], "1")
+        with self.assertRaises(ValueError):
+            await self.db.set_chat_setting(-1001, "antiflood_limit", "999", 99)
+
 if __name__ == "__main__":
     unittest.main()
