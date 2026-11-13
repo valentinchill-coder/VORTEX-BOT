@@ -5,7 +5,7 @@ from aiogram.enums import ChatType
 from aiogram.types import Message
 
 from database.db import Database
-from handlers import economy, games, moderation, profile, shop, start, private_panel, ranks
+from handlers import economy, games, moderation, profile, shop, start, private_panel, ranks, quests
 
 router = Router()
 
@@ -58,6 +58,11 @@ def parse_intent(text: str) -> str | None:
 
     if re.search(r"\b(мои достижения|покажи достижения|список достижений)\b", value):
         return "/achievements"
+
+    if re.search(r"\b(мои задания|задания на сегодня|покажи квесты|ежедневные задания)\b", value):
+        return "/quests"
+    if re.search(r"\b(забрать награды за задания|получи награды за квесты|забери награды)\b", value):
+        return "/claimquests"
 
     # Read-only information and navigation.
     if re.search(r"\b(баланс|сколько у меня (?:монет|денег)|покажи (?:мои )?монеты)\b", value):
@@ -169,6 +174,8 @@ async def _dispatch(message: Message, command_text: str, db: Database, bot, owne
         "/exchange": lambda: economy.exchange_command(synthetic, db),
         "/profile": lambda: profile.profile_command(synthetic, db, owner_ids),
         "/achievements": lambda: profile.achievements_command(synthetic, db),
+        "/quests": lambda: quests.quests_command(synthetic, db),
+        "/claimquests": lambda: quests.claim_quests_command(synthetic, db),
         "/rep": lambda: profile.reputation_command(synthetic, db),
         "/toprep": lambda: profile.top_reputation_command(synthetic, db),
         "/topactivity": lambda: profile.top_activity_command(synthetic, db),
