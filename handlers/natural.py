@@ -123,7 +123,7 @@ def parse_intent(text: str) -> str | None:
     if match:
         return f"/cancel_listing {match.group(1)}"
 
-    if re.search(r"\\b(журнал модерации|история модерации|последние действия модераторов)\\b", value):
+    if re.search(r"\b(журнал модерации|история модерации|последние действия модераторов)\b", value):
         return "/audit"
 
     # Moderation. These actions still go through the existing admin permission checks.
