@@ -488,9 +488,9 @@ async def _render_group_settings(query: CallbackQuery, chat_id: int, db: Databas
     kb.button(text="⬅️ Назад", callback_data=f"vp:group:{chat_id}")
     kb.adjust(1)
     await _safe_edit(query.message,
-        "⚙️ <b>Настройки защиты группы</b>\\n\\n"
-        f"Антифлуд: <b>{'включён' if enabled else 'выключен'}</b>\\n"
-        f"Лимит: <b>{limit} сообщений</b> за <b>{window} секунд</b>\\n\\n"
+        "⚙️ <b>Настройки защиты группы</b>\n\n"
+        f"Антифлуд: <b>{'включён' if enabled else 'выключен'}</b>\n"
+        f"Лимит: <b>{limit} сообщений</b> за <b>{window} секунд</b>\n\n"
         "Нажимай на параметры для переключения. Настройки сохраняются отдельно для каждой группы.",
         reply_markup=kb.as_markup(),
     )
