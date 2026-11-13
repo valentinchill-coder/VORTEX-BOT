@@ -54,6 +54,18 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(unchanged, 40)
         self.assertEqual(await self.db.get_balance(-1001, 20), 60)
 
+    async def test_game_points_and_leaderboard_are_group_scoped(self):
+        total, wins, played = await self.db.add_game_result(-1001, 10, 10, True)
+        self.assertEqual((total, wins, played), (10, 1, 1))
+        total, wins, played = await self.db.add_game_result(-1001, 10, 5, True)
+        self.assertEqual((total, wins, played), (15, 2, 2))
+        await self.db.add_game_result(-1002, 10, 50, True)
+        await self.db.add_game_result(-1001, 20, 3, False)
+        leaders = await self.db.top_games(-1001)
+        self.assertEqual(leaders[0], (10, 15, 2, 2))
+        self.assertEqual(leaders[1], (20, 3, 0, 1))
+        self.assertEqual(len(leaders), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
