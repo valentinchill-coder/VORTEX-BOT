@@ -12,11 +12,11 @@ router = Router()
 
 # Prices are in V-coins. Item codes are stable identifiers used by commands.
 ITEMS = {
-    "rose": {"name": "🌹 Роза", "price": 100, "kind": "gift", "description": "Подарок участнику"},
-    "choco": {"name": "🍫 Шоколад", "price": 250, "kind": "gift", "description": "Сладкий подарок"},
-    "trophy": {"name": "🏆 Кубок", "price": 1000, "kind": "collectible", "description": "Коллекционный предмет"},
-    "crown": {"name": "👑 Корона", "price": 2500, "kind": "collectible", "description": "Редкий коллекционный предмет"},
-    "lucky_charm": {"name": "🍀 Талисман удачи", "price": 400, "kind": "consumable", "description": "Используй, чтобы получить +5 игровых очков"},
+    "rose": {"name": "🌹 Роза", "price": 100, "kind": "consumable", "points": 2, "description": "При использовании даёт +2 игровых очка"},
+    "choco": {"name": "🍫 Шоколад", "price": 250, "kind": "consumable", "points": 5, "description": "При использовании даёт +5 игровых очков"},
+    "trophy": {"name": "🏆 Кубок", "price": 1000, "kind": "consumable", "points": 15, "description": "При использовании даёт +15 игровых очков"},
+    "crown": {"name": "👑 Корона", "price": 2500, "kind": "consumable", "points": 40, "description": "При использовании даёт +40 игровых очков"},
+    "lucky_charm": {"name": "🍀 Талисман удачи", "price": 400, "kind": "consumable", "points": 5, "description": "При использовании даёт +5 игровых очков"},
 }
 
 
@@ -223,12 +223,13 @@ async def use_item_command(message: Message, db: Database):
             "UPDATE user_items SET quantity=quantity-1 WHERE chat_id=? AND user_id=? AND item_code=?",
             (message.chat.id, message.from_user.id, code),
         )
+        points = int(item["points"])
         await conn.execute("""
-            INSERT INTO game_stats(chat_id,user_id,points,wins,played) VALUES(?,?,5,0,0)
-            ON CONFLICT(chat_id,user_id) DO UPDATE SET points=game_stats.points+5
-        """, (message.chat.id, message.from_user.id))
+            INSERT INTO game_stats(chat_id,user_id,points,wins,played) VALUES(?,?,?,0,0)
+            ON CONFLICT(chat_id,user_id) DO UPDATE SET points=game_stats.points+excluded.points
+        """, (message.chat.id, message.from_user.id, points))
         await conn.commit()
-    await message.answer("🍀 Талисман использован! Начислено +5 игровых очков.")
+    await message.answer(f"{item['name']} использован! Начислено +{points} игровых очков.")
 
 
 @router.message(Command("sellitem"))
@@ -461,12 +462,13 @@ async def shop_ui_callback(query: CallbackQuery, db: Database):
                 return
             await conn.execute("UPDATE user_items SET quantity=quantity-1 WHERE chat_id=? AND user_id=? AND item_code=?",
                                (query.message.chat.id, query.from_user.id, code))
+            points = int(item["points"])
             await conn.execute("""
-                INSERT INTO game_stats(chat_id,user_id,points,wins,played) VALUES(?,?,5,0,0)
-                ON CONFLICT(chat_id,user_id) DO UPDATE SET points=game_stats.points+5
-            """, (query.message.chat.id, query.from_user.id))
+                INSERT INTO game_stats(chat_id,user_id,points,wins,played) VALUES(?,?,?,0,0)
+                ON CONFLICT(chat_id,user_id) DO UPDATE SET points=game_stats.points+excluded.points
+            """, (query.message.chat.id, query.from_user.id, points))
             await conn.commit()
-        await query.message.answer("🍀 Талисман использован! Начислено +5 игровых очков.")
+        await query.message.answer(f"{item['name']} использован! Начислено +{points} игровых очков.")
     elif action == "market":
         async with aiosqlite.connect(db.path) as conn:
             cur = await conn.execute(
