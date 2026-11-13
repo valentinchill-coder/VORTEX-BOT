@@ -167,8 +167,17 @@ async def profile_button_callback(query: CallbackQuery, db: Database):
         await query.message.answer("\n".join(lines) if rows else "Пока данных нет.")
     await query.answer()
 
-@router.message(lambda m: m.from_user is not None and m.chat.type != ChatType.PRIVATE
+@router.message(Command("cancel"), lambda m: m.from_user is not None and m.chat.type != ChatType.PRIVATE
                 and (m.chat.id, m.from_user.id) in _profile_pending_rep)
+async def cancel_reputation_action(message: Message):
+    if message.from_user:
+        _profile_pending_rep.discard((message.chat.id, message.from_user.id))
+    await message.answer("Выдача репутации отменена.")
+
+
+@router.message(lambda m: m.from_user is not None and m.chat.type != ChatType.PRIVATE
+                and (m.chat.id, m.from_user.id) in _profile_pending_rep
+                and not (m.text or "").startswith("/"))
 async def give_reputation_plain(message: Message, db: Database):
     if not message.from_user:
         return
