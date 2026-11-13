@@ -155,7 +155,7 @@ async def unmute(message: Message, bot: Bot, owner_ids: frozenset[int]):
                 can_send_polls=True,
                 can_send_other_messages=True,
                 can_add_web_page_previews=True,
-                can_manage_topics=True,
+                can_manage_topics=False,
             ),
         )
         await message.answer(f"🔊 Ограничения сняты: {escape(target.full_name)}.")
