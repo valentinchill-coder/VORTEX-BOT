@@ -61,6 +61,19 @@ class Database:
                     PRIMARY KEY (chat_id, target_user_id, giver_user_id, day)
                 )
             """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS game_stats (
+                    chat_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    points INTEGER NOT NULL DEFAULT 0,
+                    wins INTEGER NOT NULL DEFAULT 0,
+                    played INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (chat_id, user_id)
+                )
+            """)
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_game_points ON game_stats(chat_id, points DESC)"
+            )
             await db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_users_activity ON users(chat_id, message_count DESC)"
             )
@@ -278,3 +291,36 @@ class Database:
                 ORDER BY message_count DESC,user_id ASC LIMIT ?
             """, (chat_id, limit))
             return [(int(row[0]), int(row[1])) for row in await cursor.fetchall()]
+
+
+    async def add_game_result(
+        self, chat_id: int, user_id: int, points: int, won: bool
+    ) -> tuple[int, int, int]:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("""
+                INSERT INTO game_stats(chat_id,user_id,points,wins,played)
+                VALUES(?,?,?,?,1)
+                ON CONFLICT(chat_id,user_id) DO UPDATE SET
+                    points=game_stats.points+excluded.points,
+                    wins=game_stats.wins+excluded.wins,
+                    played=game_stats.played+1
+            """, (chat_id, user_id, points, int(won)))
+            cursor = await db.execute(
+                "SELECT points,wins,played FROM game_stats WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            row = await cursor.fetchone()
+            await db.commit()
+            return int(row[0]), int(row[1]), int(row[2])
+
+    async def top_games(self, chat_id: int, limit: int = 10) -> list[tuple[int, int, int, int]]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute("""
+                SELECT user_id,points,wins,played FROM game_stats
+                WHERE chat_id=?
+                ORDER BY points DESC,wins DESC,played ASC,user_id ASC LIMIT ?
+            """, (chat_id, limit))
+            return [
+                (int(row[0]), int(row[1]), int(row[2]), int(row[3]))
+                for row in await cursor.fetchall()
+            ]
