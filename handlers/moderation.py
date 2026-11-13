@@ -91,7 +91,10 @@ async def warn(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
     count = await db.add_warning(message.chat.id, target.id, message.from_user.id, reason)
     await db.log_event(message.chat.id, "warn")
     await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "warn", reason)
-    await message.answer(f"⚠️ {escape(target.full_name)}: предупреждение {count}. Причина: {escape(reason)}")
+    await message.answer(
+        f"⚠️ {escape(target.full_name)}: предупреждение {count}. "
+        f"Причина: {escape(reason)}\nСрок действия: 30 дней."
+    )
 
 
 @router.message(Command("warnings"))
@@ -112,7 +115,16 @@ async def warnings(message: Message, bot: Bot, db: Database, owner_ids: frozense
             for row in rows:
                 created = escape(row["created_at"][:16].replace("T", " "))
                 reason = escape(row["reason"])
-                lines.append(f"• <code>{created}</code> — {reason} (модератор ID: <code>{row['admin_id']}</code>)")
+                if row.get("revoked_at"):
+                    status = "отменено"
+                elif row.get("expires_at") and row["expires_at"] <= datetime.now(timezone.utc).isoformat():
+                    status = "истекло"
+                else:
+                    status = "активно"
+                lines.append(
+                    f"• <code>{created}</code> — {reason} "
+                    f"[{status}] (модератор ID: <code>{row['admin_id']}</code>)"
+                )
         else:
             lines.append("Нарушений не зафиксировано.")
         await message.answer("\n".join(lines))
@@ -126,7 +138,10 @@ async def clearwarns(message: Message, bot: Bot, db: Database, owner_ids: frozen
     if target:
         await db.clear_warnings(message.chat.id, target.id)
         await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "clear_warnings")
-        await message.answer(f"Предупреждения пользователя {escape(target.full_name)} очищены.")
+        await message.answer(
+            f"Активные предупреждения пользователя {escape(target.full_name)} отменены. "
+            "История сохранена в журнале."
+        )
 
 
 def parse_duration(value: str) -> timedelta | None:
