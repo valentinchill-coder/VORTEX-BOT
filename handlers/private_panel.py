@@ -436,6 +436,9 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
         return
     try:
         target = await bot.get_chat_member(chat_id, user_id)
+        if (target.user.username or "").casefold() != raw.removeprefix("@").casefold():
+            await message.answer("Username участника изменился. Повтори поиск с актуальным @username.")
+            return
         if target.user.is_bot:
             await message.answer("Нельзя применять действия к ботам.")
             pending_action.pop(message.from_user.id, None)
@@ -813,6 +816,9 @@ async def receive_rank_target(message: Message, bot: Bot, db: Database, owner_id
         return
     try:
         member = await bot.get_chat_member(chat_id, target_id)
+        if (member.user.username or "").casefold() != raw.removeprefix("@").casefold():
+            await message.answer("Username участника изменился. Повтори поиск с актуальным @username.")
+            return
     except TelegramAPIError:
         await message.answer("Не удалось найти участника в этой группе. Проверь ID.")
         return
