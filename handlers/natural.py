@@ -160,11 +160,11 @@ async def _dispatch(message: Message, command_text: str, db: Database, bot, owne
         "/warn": lambda: moderation.warn(synthetic, bot, db, owner_ids),
         "/warnings": lambda: moderation.warnings(synthetic, bot, db, owner_ids),
         "/clearwarns": lambda: moderation.clearwarns(synthetic, bot, db, owner_ids),
-        "/mute": lambda: moderation.mute(synthetic, bot, owner_ids),
-        "/unmute": lambda: moderation.unmute(synthetic, bot, owner_ids),
-        "/kick": lambda: moderation.kick(synthetic, bot, owner_ids),
-        "/ban": lambda: moderation.ban(synthetic, bot, owner_ids),
-        "/unban": lambda: moderation.unban(synthetic, bot, owner_ids),
+        "/mute": lambda: moderation.mute(synthetic, bot, db, owner_ids),
+        "/unmute": lambda: moderation.unmute(synthetic, bot, db, owner_ids),
+        "/kick": lambda: moderation.kick(synthetic, bot, db, owner_ids),
+        "/ban": lambda: moderation.ban(synthetic, bot, db, owner_ids),
+        "/unban": lambda: moderation.unban(synthetic, bot, db, owner_ids),
     }
     handler = handlers.get(command)
     if handler:
