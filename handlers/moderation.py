@@ -6,7 +6,7 @@ from aiogram import Bot, Router
 from aiogram.enums import ChatMemberStatus
 from aiogram.filters import Command
 from aiogram.types import Message, ChatPermissions
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError
 
 from database.db import Database
 
@@ -41,7 +41,7 @@ async def target_from_reply(message: Message):
 async def check_admin(message: Message, bot: Bot, owner_ids: frozenset[int]) -> bool:
     try:
         allowed = await is_admin(message, bot, owner_ids)
-    except TelegramBadRequest:
+    except TelegramAPIError:
         allowed = False
     if not allowed:
         await message.answer("Эта команда доступна только администраторам.")
@@ -116,7 +116,7 @@ async def mute(message: Message, bot: Bot, owner_ids: frozenset[int]):
             until_date=until,
         )
         await message.answer(f"🔇 {escape(target.full_name)} ограничен на {escape(parts[1]) if len(parts) > 1 else '10m'}.")
-    except TelegramBadRequest as exc:
+    except TelegramAPIError as exc:
         await message.answer(f"Не удалось ограничить пользователя: {exc.message}")
 
 
@@ -146,7 +146,7 @@ async def unmute(message: Message, bot: Bot, owner_ids: frozenset[int]):
             ),
         )
         await message.answer(f"🔊 Ограничения сняты: {escape(target.full_name)}.")
-    except TelegramBadRequest as exc:
+    except TelegramAPIError as exc:
         await message.answer(f"Не удалось снять ограничения: {exc.message}")
 
 
@@ -161,7 +161,7 @@ async def kick(message: Message, bot: Bot, owner_ids: frozenset[int]):
         await bot.ban_chat_member(message.chat.id, target.id)
         await bot.unban_chat_member(message.chat.id, target.id, only_if_banned=True)
         await message.answer(f"👢 {escape(target.full_name)} удалён из группы.")
-    except TelegramBadRequest as exc:
+    except TelegramAPIError as exc:
         await message.answer(f"Не удалось удалить пользователя: {exc.message}")
 
 
@@ -175,7 +175,7 @@ async def ban(message: Message, bot: Bot, owner_ids: frozenset[int]):
     try:
         await bot.ban_chat_member(message.chat.id, target.id)
         await message.answer(f"⛔ {escape(target.full_name)} заблокирован.")
-    except TelegramBadRequest as exc:
+    except TelegramAPIError as exc:
         await message.answer(f"Не удалось заблокировать пользователя: {exc.message}")
 
 
@@ -190,5 +190,5 @@ async def unban(message: Message, bot: Bot, owner_ids: frozenset[int]):
     try:
         await bot.unban_chat_member(message.chat.id, int(parts[1]), only_if_banned=True)
         await message.answer("Блокировка снята.")
-    except TelegramBadRequest as exc:
+    except TelegramAPIError as exc:
         await message.answer(f"Не удалось разблокировать: {exc.message}")
