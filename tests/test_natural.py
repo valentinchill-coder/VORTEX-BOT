@@ -23,6 +23,15 @@ class NaturalLanguageIntentTests(unittest.TestCase):
     def test_transfer(self):
         self.assertEqual(parse_intent("Переведи 50 монет"), "/pay 50")
 
+    def test_rank_queries_and_management_phrases(self):
+        self.assertEqual(parse_intent("Мой ранг"), "__myrank__")
+        self.assertEqual(parse_intent("Покажи ранги"), "__ranks__")
+        self.assertEqual(parse_intent("Выдать ранг"), "__rank_usage__")
+        self.assertEqual(parse_intent("Выдать ранг 2"), "__rank_set_2__")
+        self.assertEqual(parse_intent("Повысить"), "__rank_up__")
+        self.assertEqual(parse_intent("Понизить"), "__rank_down__")
+        self.assertEqual(parse_intent("Снять ранг"), "__rank_remove__")
+
     def test_group_statistics_request_is_recognized(self):
         self.assertEqual(parse_intent("Покажи статистику группы"), "/stats")
 
