@@ -47,10 +47,13 @@ class AntiFloodMiddleware(BaseMiddleware):
                         "Автоматическое предупреждение за флуд",
                     )
                     await db.log_event(event.chat.id, "antiflood")
-                    await event.answer(
-                        f"⚠️ {escape(event.from_user.full_name)}, "
-                        f"не флуди! Выдано предупреждение. Всего предупреждений: {count}."
-                    )
+                    bot = data.get("bot")
+                    if bot:
+                        await bot.send_message(
+                            event.chat.id,
+                            f"⚠️ {escape(event.from_user.full_name)}, "
+                            f"не флуди! Выдано предупреждение. Всего предупреждений: {count}.",
+                        )
                 except Exception:
                     # Keep the middleware from breaking normal message processing
                     # if the database or Telegram API is temporarily unavailable.
