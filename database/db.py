@@ -268,3 +268,13 @@ class Database:
                 ORDER BY balance DESC,user_id ASC LIMIT ?
             """, (chat_id, limit))
             return [(int(row[0]), int(row[1])) for row in await cursor.fetchall()]
+
+
+    async def top_activity(self, chat_id: int, limit: int = 10) -> list[tuple[int, int]]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute("""
+                SELECT user_id,message_count FROM users
+                WHERE chat_id=?
+                ORDER BY message_count DESC,user_id ASC LIMIT ?
+            """, (chat_id, limit))
+            return [(int(row[0]), int(row[1])) for row in await cursor.fetchall()]
