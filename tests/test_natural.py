@@ -33,7 +33,7 @@ class NaturalLanguageIntentTests(unittest.TestCase):
             moderation: ["warn", "warnings", "clearwarns", "mute", "unmute", "kick", "ban", "unban"],
             profile: ["profile_command", "reputation_command", "top_reputation_command", "top_activity_command"],
             shop: ["shop_command", "buy_item_command", "inventory_command", "gift_item_command",
-                   "use_item_command", "sell_item_command", "market_command", "buy_listing_command"],
+                   "use_item_command", "sell_item_command", "market_command", "buy_listing_command", "cancel_listing_command"],
         }
         for module, names in targets.items():
             for name in names:
