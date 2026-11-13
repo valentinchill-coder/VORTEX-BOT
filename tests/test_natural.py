@@ -27,6 +27,7 @@ class NaturalLanguageIntentTests(unittest.TestCase):
     def test_rank_queries_and_management_phrases(self):
         self.assertEqual(parse_intent("Мой ранг"), "__myrank__")
         self.assertEqual(parse_intent("Покажи ранги"), "__ranks__")
+        self.assertEqual(parse_intent("Какие ранги есть в боте"), "__ranks__")
         self.assertEqual(parse_intent("Выдать ранг"), "__rank_usage__")
         self.assertEqual(parse_intent("Выдать ранг 2"), "__rank_set_2__")
         self.assertEqual(parse_intent("Повысить"), "__rank_up__")
