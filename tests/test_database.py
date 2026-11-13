@@ -71,6 +71,22 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         invalid, *_ = await self.db.exchange_game_points(-1001, 10, 11, rate=10)
         self.assertFalse(invalid)
 
+    async def test_transfer_rejects_nonpositive_and_self_transfers(self):
+        await self.db.claim_daily(-1001, 10)
+        before = await self.db.get_balance(-1001, 10)
+        success, remaining = await self.db.transfer(-1001, 10, 20, -50)
+        self.assertFalse(success)
+        self.assertEqual(remaining, before)
+        success, remaining = await self.db.transfer(-1001, 10, 10, 50)
+        self.assertFalse(success)
+        self.assertEqual(remaining, before)
+        self.assertEqual(await self.db.get_balance(-1001, 10), before)
+
+    async def test_database_rejects_self_reputation_and_negative_game_points(self):
+        self.assertFalse(await self.db.give_reputation(-1001, 10, 10))
+        with self.assertRaises(ValueError):
+            await self.db.add_game_result(-1001, 10, -1, False)
+
     async def test_game_points_and_leaderboard_are_group_scoped(self):
         total, wins, played = await self.db.add_game_result(-1001, 10, 10, True)
         self.assertEqual((total, wins, played), (10, 1, 1))
