@@ -105,6 +105,7 @@ def stats_section_keyboard():
 def member_actions(chat_id: int, user_id: int):
     keyboard = InlineKeyboardBuilder()
     for label, action in [
+        ("👁 Посмотреть предупреждения", "warnings"),
         ("⚠️ Выдать предупреждение", "warn"),
         ("🔇 Мут на 10 минут", "mute"),
         ("🔊 Снять мут", "unmute"),
@@ -170,7 +171,8 @@ MENU_TEXT = {
     "games": (
         "🎮 <b>Игровой зал VORTEX</b>\n\n"
         "Играй прямо в группе, зарабатывай игровые очки и поднимайся в рейтинге.\n"
-        "🔢 Угадай число — найди число от 1 до 63 за 5 попыток (+10 очков).\n"        "✊ Камень, ножницы, бумага — сыграй против бота (до +5 очков).\n"
+        "🔢 Угадай число — найди число от 1 до 63 за 5 попыток (+10 очков).\n"
+        "✊ Камень, ножницы, бумага — сыграй против бота (до +5 очков).\n"
         "🧠 Викторина — два варианта ответа, шанс случайного угадывания 50% (+3 очка).\n\n"
         "Игровые очки отдельны от V-coins. Команда /topgames покажет рейтинг.\n"
         "Обмен: /exchange 100 — 100 игровых очков = 10 V-coins."
@@ -187,6 +189,7 @@ MENU_TEXT = {
         "/clearwarns — очистить предупреждения (ответом)\n"
         "/mute 10m, /unmute, /kick, /ban — действия (ответом)\n"
         "/unban ID — разблокировать по Telegram ID\n"
+        "/ranks, /myrank, /setrank — система рангов модерации\n"
         "/stats — статистика группы\n\n"
         "<b>Профиль и репутация:</b>\n"
         "/profile, /rep (ответом), /toprep, /topactivity\n\n"
@@ -325,7 +328,7 @@ async def member_action_callback(
         target = target_member.user
         if (
             target_member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR)
-            and action not in ("warn", "clearwarns")
+            and action not in ("warn", "warnings", "clearwarns")
         ):
             await query.answer(
                 "Администратора можно предупредить, но ограничить или исключить его через бота нельзя.",
@@ -333,7 +336,10 @@ async def member_action_callback(
             )
             return
 
-        if action == "warn":
+        if action == "warnings":
+            count = await db.warning_count(chat_id, user_id)
+            result = f"👁 У {escape(target.full_name)} предупреждений: {count}."
+        elif action == "warn":
             count = await db.add_warning(chat_id, user_id, query.from_user.id, "Выдано через меню")
             await db.log_event(chat_id, "warn")
             result = f"⚠️ {escape(target.full_name)} получил предупреждение. Всего: {count}."
