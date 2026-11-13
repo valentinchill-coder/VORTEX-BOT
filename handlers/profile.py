@@ -35,7 +35,7 @@ def _achievement_text(stats: dict[str, int]) -> str:
         else:
             lines.append(f"🔒 <b>{name}</b> — {value}/{target} · {description}")
     lines.extend(["", f"Открыто достижений: <b>{unlocked}/{len(ACHIEVEMENTS)}</b>"])
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def _rank(messages: int) -> str:
