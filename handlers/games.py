@@ -12,6 +12,10 @@ from database.db import Database
 
 router = Router()
 
+GUESS_MIN = 1
+GUESS_MAX = 63
+GUESS_ATTEMPTS = 5
+
 # Short-lived game rounds are kept in memory; long-term scores are stored in SQLite.
 _guess_games: dict[tuple[int, int], dict[str, int]] = {}
 _rps_rounds: dict[tuple[int, int], str] = {}
@@ -56,11 +60,11 @@ async def _start_guess(chat_id: int, user_id: int, send):
     if key in _guess_games:
         await send("У тебя уже идёт игра. Продолжай командой /guess число.")
         return
-    number = random.randint(1, 100)
-    _guess_games[key] = {"number": number, "attempts": 6}
+    number = random.randint(GUESS_MIN, GUESS_MAX)
+    _guess_games[key] = {"number": number, "attempts": GUESS_ATTEMPTS}
     await send(
         "🔢 <b>Угадай число!</b>\n\n"
-        "Я загадал число от 1 до 100. У тебя 6 попыток. Используй подсказки, чтобы сузить диапазон.\n"
+        "Я загадал число от 1 до 63. У тебя 5 попыток. Используй подсказки, чтобы сузить диапазон.\n"
         "Отправляй: <code>/guess 50</code>"
     )
 
@@ -82,19 +86,21 @@ async def _start_rps(chat_id: int, user_id: int, send):
 async def _start_quiz(chat_id: int, user_id: int, send):
     key = (chat_id, user_id)
     nonce = secrets.token_hex(3)
-    question, options, correct = random.choice(_QUIZ)
-    correct_answer = options[correct]
-    random.shuffle(options)
-    correct = options.index(correct_answer)
+    question, options, correct_index = random.choice(_QUIZ)
+    correct_answer = options[correct_index]
+    wrong_answer = random.choice([option for index, option in enumerate(options) if index != correct_index])
+    displayed_options = [correct_answer, wrong_answer]
+    random.shuffle(displayed_options)
+    correct = displayed_options.index(correct_answer)
     _quiz_rounds[key] = (nonce, correct)
     keyboard = InlineKeyboardBuilder()
-    for index, option in enumerate(options):
+    for index, option in enumerate(displayed_options):
         keyboard.button(
             text=option,
             callback_data=f"game:quiz:{user_id}:{nonce}:{index}",
         )
     keyboard.adjust(2)
-    await send(f"🧠 <b>Викторина</b>\n\n{escape(question)}", reply_markup=keyboard.as_markup())
+    await send(f"🧠 <b>Викторина</b>\n\n{escape(question)}\nВыбери правильный ответ из двух вариантов.", reply_markup=keyboard.as_markup())
 
 
 @router.message(Command("games"))
@@ -138,10 +144,10 @@ async def guess_command(message: Message, db: Database):
     try:
         guess = int(parts[1])
     except ValueError:
-        await message.answer("Нужно указать целое число от 1 до 100.")
+        await message.answer(f"Нужно указать целое число от {GUESS_MIN} до {GUESS_MAX}.")
         return
-    if not 1 <= guess <= 100:
-        await message.answer("Число должно быть от 1 до 100.")
+    if not GUESS_MIN <= guess <= GUESS_MAX:
+        await message.answer(f"Число должно быть от {GUESS_MIN} до {GUESS_MAX}.")
         return
 
     game["attempts"] -= 1
@@ -317,8 +323,8 @@ async def guess_plain_text(message: Message, db: Database):
     if not game:
         return
     guess = int((message.text or "").strip())
-    if not 1 <= guess <= 100:
-        await message.answer("Введи число от 1 до 100.")
+    if not GUESS_MIN <= guess <= GUESS_MAX:
+        await message.answer(f"Введи число от {GUESS_MIN} до {GUESS_MAX}.")
         return
     game["attempts"] -= 1
     target = game["number"]
