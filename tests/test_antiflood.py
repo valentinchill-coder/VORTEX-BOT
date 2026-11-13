@@ -11,6 +11,13 @@ class AntiFloodActivityTests(unittest.IsolatedAsyncioTestCase):
     async def test_flooded_message_is_deleted_and_not_counted_as_activity(self):
         middleware = AntiFloodMiddleware(limit=6, window=8.0)
         db = AsyncMock()
+        db.get_chat_settings.return_value = {
+            "antiflood_enabled": "1",
+            "antiflood_limit": "6",
+            "antiflood_window": "8",
+            "link_filter_enabled": "0",
+            "word_filter_enabled": "0",
+        }
         db.add_warning.return_value = 1
         bot = AsyncMock()
         handler = AsyncMock(return_value=None)
