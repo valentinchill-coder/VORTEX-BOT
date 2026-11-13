@@ -164,6 +164,8 @@ class Database:
             }
 
     async def give_reputation(self, chat_id: int, target_user_id: int, giver_user_id: int) -> bool:
+        if target_user_id == giver_user_id:
+            return False
         now = datetime.now(timezone.utc)
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute("""
@@ -217,6 +219,8 @@ class Database:
             return int(row[0]) if row else 0
 
     async def claim_daily(self, chat_id: int, user_id: int, reward: int = 100) -> tuple[bool, int]:
+        if reward <= 0:
+            raise ValueError("Daily reward must be positive.")
         today = datetime.now(timezone.utc).date().isoformat()
         async with aiosqlite.connect(self.path) as db:
             await db.execute("BEGIN IMMEDIATE")
@@ -244,6 +248,8 @@ class Database:
             return True, balance
 
     async def transfer(self, chat_id: int, sender_id: int, recipient_id: int, amount: int) -> tuple[bool, int]:
+        if amount <= 0 or sender_id == recipient_id:
+            return False, await self.get_balance(chat_id, sender_id)
         async with aiosqlite.connect(self.path) as db:
             await db.execute("BEGIN IMMEDIATE")
             await db.execute(
@@ -296,6 +302,8 @@ class Database:
     async def add_game_result(
         self, chat_id: int, user_id: int, points: int, won: bool
     ) -> tuple[int, int, int]:
+        if points < 0:
+            raise ValueError("Game points cannot be negative.")
         async with aiosqlite.connect(self.path) as db:
             await db.execute("""
                 INSERT INTO game_stats(chat_id,user_id,points,wins,played)
