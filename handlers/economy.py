@@ -108,7 +108,7 @@ async def exchange_command(message: Message, db: Database):
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) != 2 or not parts[1].isdigit():
         await message.answer(
-            "Укажи количество игровых очков: /exchange 100\\n"
+            "Укажи количество игровых очков: /exchange 100\n"
             "Курс: 10 игровых очков = 1 V-coin. Сумма должна быть кратна 10."
         )
         return
@@ -128,9 +128,9 @@ async def exchange_command(message: Message, db: Database):
         )
         return
     await message.answer(
-        f"💱 Обмен выполнен!\\n"
-        f"Списано: <b>{points}</b> игровых очков\\n"
-        f"Начислено: <b>+{coins} V-coins</b>\\n"
-        f"Остаток игровых очков: <b>{remaining_points}</b>\\n"
+        f"💱 Обмен выполнен!\n"
+        f"Списано: <b>{points}</b> игровых очков\n"
+        f"Начислено: <b>+{coins} V-coins</b>\n"
+        f"Остаток игровых очков: <b>{remaining_points}</b>\n"
         f"Баланс: <b>{balance} V-coins</b>"
     )
