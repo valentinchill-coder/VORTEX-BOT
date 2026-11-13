@@ -144,7 +144,7 @@ def parse_intent(text: str) -> str | None:
         return "/clearwarns"
     if re.search(r"\b(сними мут|размути|размут|анмут|верни возможность писать)\b", value):
         return "/unmute"
-    if re.search(r"\b(замути|замутить|мут|mute|ограничь писать)\b", value):
+    if re.search(r"\b(замути|замутить|замуть|мут|mute|ограничь писать)\b", value):
         duration = re.search(r"(\d+)\s*(минут\w*|мин\b|час\w*|ч\b|дн\w*|д\b)", value)
         if not duration:
             return "/mute 10m"
