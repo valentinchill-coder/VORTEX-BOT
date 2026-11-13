@@ -11,7 +11,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 
 from config import load_settings
 from database.db import Database
-from handlers import start, moderation, admin
+from handlers import start, moderation, admin, profile
 from middlewares.antiflood import AntiFloodMiddleware
 
 
@@ -43,6 +43,7 @@ def create_dispatcher(db: Database, owner_ids: frozenset[int]) -> Dispatcher:
     dp.include_router(start.router)
     dp.include_router(moderation.router)
     dp.include_router(admin.router)
+    dp.include_router(profile.router)
     dp.chat_member.register(
         welcome_new_members,
         ChatMemberUpdatedFilter(JOIN_TRANSITION),
@@ -107,6 +108,9 @@ async def main():
         await bot.set_my_commands([
             BotCommand(command="start", description="Открыть главное меню"),
             BotCommand(command="help", description="Помощь и список команд"),
+            BotCommand(command="profile", description="Профиль участника (ответом)"),
+            BotCommand(command="rep", description="Выдать репутацию (ответом)"),
+            BotCommand(command="toprep", description="Топ репутации группы"),
             BotCommand(command="warn", description="Выдать предупреждение (ответом)"),
             BotCommand(command="warnings", description="Посмотреть предупреждения (ответом)"),
             BotCommand(command="clearwarns", description="Очистить предупреждения (ответом)"),
@@ -122,7 +126,6 @@ async def main():
         if settings.mode == "webhook":
             await run_webhook(bot, dp, settings)
         else:
-            # Polling and webhooks are mutually exclusive.
             await bot.delete_webhook(drop_pending_updates=False)
             await dp.start_polling(
                 bot,
