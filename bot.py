@@ -7,7 +7,7 @@ import aiosqlite
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
+from aiogram.enums import ChatMemberStatus, ParseMode
 from aiogram.types import (
     ChatMemberUpdated,
     BotCommand,
@@ -32,8 +32,25 @@ async def notify_audit_ready(bot: Bot, db: Database, owner_ids: frozenset[int]) 
     """Send the requested one-time readiness notice to configured bot owners."""
     if os.getenv("AUDIT_READY_NOTIFY", "").strip() != "1":
         return
-    if not owner_ids:
-        logging.error("AUDIT_READY_NOTIFY is enabled but OWNER_IDS is empty; no Telegram recipient is configured")
+    recipients = set(owner_ids)
+    if not recipients:
+        # If OWNER_IDS was never configured, notify the creator of each known group.
+        async with aiosqlite.connect(db.path) as conn:
+            cursor = await conn.execute("SELECT DISTINCT chat_id FROM users")
+            chat_ids = [int(row[0]) for row in await cursor.fetchall()]
+        for chat_id in chat_ids:
+            try:
+                admins = await bot.get_chat_administrators(chat_id)
+                creator = next(
+                    (admin.user.id for admin in admins if admin.status == ChatMemberStatus.CREATOR),
+                    None,
+                )
+                if creator:
+                    recipients.add(creator)
+            except Exception:
+                logging.exception("Could not identify the creator of a known group for readiness notification")
+    if not recipients:
+        logging.error("AUDIT_READY_NOTIFY is enabled but no owner or known group creator could be identified")
         return
 
     async with aiosqlite.connect(db.path) as conn:
@@ -50,7 +67,7 @@ async def notify_audit_ready(bot: Bot, db: Database, owner_ids: frozenset[int]) 
 
     delivered = 0
     failed = 0
-    for owner_id in owner_ids:
+    for owner_id in recipients:
         try:
             await bot.send_message(owner_id, "Все работает и готово к использованию")
             delivered += 1
