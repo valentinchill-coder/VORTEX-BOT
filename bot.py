@@ -216,6 +216,7 @@ async def main():
             BotCommand(command="sellitem", description="Выставить предмет на рынок"),
             BotCommand(command="market", description="Объявления игроков"),
             BotCommand(command="buylisting", description="Купить лот на рынке"),
+            BotCommand(command="cancel_listing", description="Снять своё объявление с рынка"),
             BotCommand(command="topmoney", description="Топ богачей группы"),
             BotCommand(command="games", description="Открыть игровой зал"),
             BotCommand(command="guessgame", description="Начать игру Угадай число"),
