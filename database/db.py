@@ -43,6 +43,15 @@ class Database:
                 )
             """)
             await db.execute("""
+                CREATE TABLE IF NOT EXISTS wallets (
+                    chat_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    balance INTEGER NOT NULL DEFAULT 0,
+                    last_daily TEXT,
+                    PRIMARY KEY (chat_id, user_id)
+                )
+            """)
+            await db.execute("""
                 CREATE TABLE IF NOT EXISTS reputation (
                     chat_id INTEGER NOT NULL,
                     target_user_id INTEGER NOT NULL,
@@ -184,3 +193,78 @@ class Database:
                 "warnings": int(warning_count),
                 "antiflood": int(flood_count),
             }
+
+    async def get_balance(self, chat_id: int, user_id: int) -> int:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                "SELECT balance FROM wallets WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            row = await cursor.fetchone()
+            return int(row[0]) if row else 0
+
+    async def claim_daily(self, chat_id: int, user_id: int, reward: int = 100) -> tuple[bool, int]:
+        today = datetime.now(timezone.utc).date().isoformat()
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("BEGIN IMMEDIATE")
+            cursor = await db.execute(
+                "SELECT balance,last_daily FROM wallets WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            row = await cursor.fetchone()
+            if row and row[1] == today:
+                await db.commit()
+                return False, int(row[0])
+            await db.execute("""
+                INSERT INTO wallets(chat_id,user_id,balance,last_daily)
+                VALUES(?,?,?,?)
+                ON CONFLICT(chat_id,user_id) DO UPDATE SET
+                    balance=wallets.balance+excluded.balance,
+                    last_daily=excluded.last_daily
+            """, (chat_id, user_id, reward, today))
+            cursor = await db.execute(
+                "SELECT balance FROM wallets WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            balance = int((await cursor.fetchone())[0])
+            await db.commit()
+            return True, balance
+
+    async def transfer(self, chat_id: int, sender_id: int, recipient_id: int, amount: int) -> tuple[bool, int]:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("BEGIN IMMEDIATE")
+            await db.execute(
+                "INSERT OR IGNORE INTO wallets(chat_id,user_id,balance) VALUES(?,?,0)",
+                (chat_id, sender_id),
+            )
+            await db.execute(
+                "INSERT OR IGNORE INTO wallets(chat_id,user_id,balance) VALUES(?,?,0)",
+                (chat_id, recipient_id),
+            )
+            cursor = await db.execute(
+                "SELECT balance FROM wallets WHERE chat_id=? AND user_id=?",
+                (chat_id, sender_id),
+            )
+            balance = int((await cursor.fetchone())[0])
+            if balance < amount:
+                await db.commit()
+                return False, balance
+            await db.execute(
+                "UPDATE wallets SET balance=balance-? WHERE chat_id=? AND user_id=?",
+                (amount, chat_id, sender_id),
+            )
+            await db.execute(
+                "UPDATE wallets SET balance=balance+? WHERE chat_id=? AND user_id=?",
+                (amount, chat_id, recipient_id),
+            )
+            await db.commit()
+            return True, balance - amount
+
+    async def top_balances(self, chat_id: int, limit: int = 10) -> list[tuple[int, int]]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute("""
+                SELECT user_id,balance FROM wallets
+                WHERE chat_id=? AND balance>0
+                ORDER BY balance DESC,user_id ASC LIMIT ?
+            """, (chat_id, limit))
+            return [(int(row[0]), int(row[1])) for row in await cursor.fetchall()]
