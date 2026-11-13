@@ -25,6 +25,15 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rows[1]["action"], "warn")
         self.assertEqual(rows[1]["details"], "spam")
 
+    async def test_backup_contains_committed_database_data(self):
+        backup_path = Path(self.temp_dir.name) / "backup.db"
+        await self.db.register_message(-1001, 77, "backup_user", "Backup User")
+        await self.db.backup_to(str(backup_path))
+        backup_db = Database(str(backup_path))
+        profile = await backup_db.get_profile(-1001, 77)
+        self.assertEqual(profile["user"]["full_name"], "Backup User")
+        self.assertEqual(profile["user"]["message_count"], 1)
+
     async def test_activity_profile_and_stats(self):
         await self.db.register_message(-1001, 10, "tester", "Test User")
         await self.db.register_message(-1001, 10, "tester", "Test User")
