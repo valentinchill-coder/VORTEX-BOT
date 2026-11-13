@@ -15,6 +15,7 @@ class AntiFloodMiddleware(BaseMiddleware):
         self.window = window
         self.messages = defaultdict(deque)
         self._checks = 0
+        self._settings_cache = {}
 
     async def __call__(self, handler, event, data):
         if (
@@ -26,10 +27,22 @@ class AntiFloodMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         db = data.get("db")
-        key = (event.chat.id, event.from_user.id)
         now = time.monotonic()
+        settings = {"antiflood_enabled": "1", "antiflood_limit": str(self.limit), "antiflood_window": str(int(self.window))}
+        cached = self._settings_cache.get(event.chat.id)
+        if cached and now - cached[0] < 10:
+            settings = cached[1]
+        elif db:
+            try:
+                settings = await db.get_chat_settings(event.chat.id)
+                self._settings_cache[event.chat.id] = (now, settings)
+            except Exception:
+                pass
+        limit = max(1, min(50, int(settings.get("antiflood_limit", self.limit))))
+        window = max(1, min(60, int(settings.get("antiflood_window", int(self.window)))))
+        key = (event.chat.id, event.from_user.id)
         queue = self.messages[key]
-        while queue and now - queue[0] > self.window:
+        while queue and now - queue[0] > window:
             queue.popleft()
         queue.append(now)
         self._checks += 1
@@ -40,7 +53,7 @@ class AntiFloodMiddleware(BaseMiddleware):
                 if not stale_queue:
                     self.messages.pop(stale_key, None)
 
-        if len(queue) > self.limit:
+        if settings.get("antiflood_enabled", "1") == "1" and len(queue) > limit:
             queue.clear()
             try:
                 await event.delete()
