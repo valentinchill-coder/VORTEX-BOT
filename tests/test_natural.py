@@ -1,7 +1,8 @@
 import unittest
+from unittest.mock import AsyncMock, Mock
 
 from handlers import economy, games, moderation, profile, shop
-from handlers.natural import parse_intent
+from handlers.natural import parse_intent, _dispatch
 
 
 class NaturalLanguageIntentTests(unittest.TestCase):
@@ -51,6 +52,26 @@ class NaturalLanguageIntentTests(unittest.TestCase):
 
     def test_unknown_chat_is_ignored(self):
         self.assertIsNone(parse_intent("Привет всем, как дела?"))
+
+
+
+
+class NaturalDispatchTests(unittest.IsolatedAsyncioTestCase):
+    async def test_profile_dispatch_passes_owner_ids(self):
+        original = profile.profile_command
+        handler = AsyncMock()
+        profile.profile_command = handler
+        try:
+            message = Mock()
+            synthetic = Mock()
+            message.model_copy.return_value = synthetic
+            db = object()
+            bot = object()
+            owner_ids = frozenset({6537816900})
+            await _dispatch(message, "/profile", db, bot, owner_ids)
+            handler.assert_awaited_once_with(synthetic, db, owner_ids)
+        finally:
+            profile.profile_command = original
 
 
 if __name__ == "__main__":
