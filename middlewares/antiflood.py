@@ -11,7 +11,7 @@ from aiogram.types import Message
 def contains_blocked_word(content: str, blocked_words: list[str]) -> bool:
     for word in blocked_words:
         normalized = word.strip().casefold()
-        if normalized and re.search(rf"(?<!\\w){re.escape(normalized)}(?!\\w)", content.casefold()):
+        if normalized and re.search(rf"(?<!\w){re.escape(normalized)}(?!\w)", content.casefold()):
             return True
     return False
 
