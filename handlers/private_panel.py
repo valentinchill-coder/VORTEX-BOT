@@ -31,7 +31,7 @@ async def _safe_query_answer(query: CallbackQuery, *args, **kwargs) -> None:
         if "query is too old" not in message and "query id is invalid" not in message:
             raise
 
-pending_action: dict[int, tuple[int, str]] = {}
+pending_action: dict[int, tuple[int, str, int]] = {}
 pending_filter_input: dict[int, int] = {}
 pending_rank_target: dict[int, int] = {}
 
@@ -91,9 +91,13 @@ def group_keyboard(chat_id: int):
 
 def moderation_keyboard(chat_id: int):
     kb = InlineKeyboardBuilder()
+    kb.button(text="⚠️ Предупредить", callback_data=f"vp:action:warn:{chat_id}")
+    for minutes, label in [
+        (10, "10 минут"), (30, "30 минут"), (60, "1 час"),
+        (1440, "24 часа"), (10080, "7 дней"),
+    ]:
+        kb.button(text=f"🔇 Мут — {label}", callback_data=f"vp:action:mute:{chat_id}:{minutes}")
     for label, action in [
-        ("⚠️ Предупредить", "warn"),
-        ("🔇 Мут на 10 минут", "mute"),
         ("🔊 Снять мут", "unmute"),
         ("👢 Исключить", "kick"),
         ("⛔ Заблокировать", "ban"),
@@ -378,27 +382,32 @@ async def choose_action(query: CallbackQuery, bot: Bot, owner_ids: frozenset[int
         await _safe_query_answer(query,)
         return
     parts = query.data.split(":")
-    if len(parts) != 4:
-        await _safe_query_answer(query,"Некорректное действие.", show_alert=True)
+    if len(parts) not in (4, 5):
+        await _safe_query_answer(query, "Некорректное действие.", show_alert=True)
         return
-    _, _, action, chat_id_raw = parts
+    _, _, action, chat_id_raw, *extra = parts
     allowed_actions = {"warn", "mute", "unmute", "kick", "ban", "clearwarns"}
-    if action not in allowed_actions:
-        await _safe_query_answer(query,"Неизвестное действие.", show_alert=True)
+    if action not in allowed_actions or (action == "mute") != bool(extra):
+        await _safe_query_answer(query, "Неизвестное действие или срок.", show_alert=True)
         return
     try:
         chat_id = int(chat_id_raw)
+        duration_minutes = int(extra[0]) if extra else 10
     except ValueError:
-        await _safe_query_answer(query,"Некорректная группа.", show_alert=True)
+        await _safe_query_answer(query, "Некорректные параметры.", show_alert=True)
+        return
+    if action == "mute" and duration_minutes not in {10, 30, 60, 1440, 10080}:
+        await _safe_query_answer(query, "Недопустимый срок мута.", show_alert=True)
         return
     if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
-        await _safe_query_answer(query,"Доступ запрещён.", show_alert=True)
+        await _safe_query_answer(query, "Доступ запрещён.", show_alert=True)
         return
-    pending_action[query.from_user.id] = (chat_id, action)
-    await query.message.answer(
-        f"Отправь @username участника для действия «{action}».\n"
-        "Отмена: /cancel"
-    )
+    pending_action[query.from_user.id] = (chat_id, action, duration_minutes)
+    if action == "warn":
+        prompt = "Отправь @username и причину предупреждения одним сообщением. Причина — до 200 символов."
+    else:
+        prompt = f"Отправь @username участника для действия «{action}»."
+    await query.message.answer(prompt + "\nОтмена: /cancel")
     await _safe_query_answer(query,)
 
 
@@ -418,16 +427,23 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
     pending = pending_action.get(message.from_user.id)
     if not pending:
         return
-    chat_id, action = pending
+    chat_id, action, duration_minutes = pending
     if not await allowed(bot, message.from_user.id, chat_id, owner_ids):
         pending_action.pop(message.from_user.id, None)
         await message.answer("Доступ отозван. Операция отменена.")
         return
     raw = (message.text or "").strip()
-    if not raw.startswith("@"):
-        await message.answer("Укажи username в формате @username. Для отмены /cancel.")
+    parts = raw.split(maxsplit=1)
+    username = parts[0] if parts else ""
+    reason = parts[1].strip() if len(parts) > 1 else ""
+    if not username.startswith("@") or (action == "warn" and not reason):
+        hint = "Формат: @username причина предупреждения." if action == "warn" else "Укажи username в формате @username."
+        await message.answer(hint + " Для отмены /cancel.")
         return
-    user_id = await _resolve_group_username(db, chat_id, raw)
+    if action == "warn" and len(reason) > 200:
+        await message.answer("Причина слишком длинная. Максимум 200 символов.")
+        return
+    user_id = await _resolve_group_username(db, chat_id, username)
     if user_id is None:
         await message.answer("Не нашёл однозначного участника с таким username. Он должен быть известен боту в этой группе; проверь написание @username.")
         return
@@ -436,7 +452,7 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
         return
     try:
         target = await bot.get_chat_member(chat_id, user_id)
-        if (target.user.username or "").casefold() != raw.removeprefix("@").casefold():
+        if (target.user.username or "").casefold() != username.removeprefix("@").casefold():
             await message.answer("Username участника изменился. Повтори поиск с актуальным @username.")
             return
         if target.user.is_bot:
@@ -459,10 +475,10 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
                 pending_action.pop(message.from_user.id, None)
                 return
         if action == "warn":
-            count = await db.add_warning(chat_id, user_id, message.from_user.id, "Из личной панели")
+            count = await db.add_warning(chat_id, user_id, message.from_user.id, reason)
             await db.log_event(chat_id, "warn")
-            result = f"⚠️ Выдано предупреждение. Всего: {count}."
-            details = "Из личной панели"
+            result = f"⚠️ Выдано предупреждение. Всего: {count}.\nПричина: {escape(reason)}"
+            details = f"Причина: {reason}; личная панель"
         elif action == "clearwarns":
             await db.clear_warnings(chat_id, user_id)
             result = "🧹 Предупреждения очищены."
@@ -473,9 +489,10 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
                 can_send_photos=False, can_send_videos=False, can_send_video_notes=False,
                 can_send_voice_notes=False, can_send_polls=False, can_send_other_messages=False,
                 can_add_web_page_previews=False, can_manage_topics=False,
-            ), until_date=datetime.now(timezone.utc) + timedelta(minutes=10))
-            result = "🔇 Участник ограничен на 10 минут."
-            details = "10 минут; личная панель"
+            ), until_date=datetime.now(timezone.utc) + timedelta(minutes=duration_minutes))
+            duration_label = {10: "10 минут", 30: "30 минут", 60: "1 час", 1440: "24 часа", 10080: "7 дней"}[duration_minutes]
+            result = f"🔇 Участник ограничен на {duration_label}."
+            details = f"{duration_label}; личная панель"
         elif action == "unmute":
             chat_info = await bot.get_chat(chat_id)
             await bot.restrict_chat_member(chat_id, user_id, permissions=chat_info.permissions or ChatPermissions(
@@ -502,7 +519,8 @@ async def execute_action(message: Message, bot: Bot, db: Database, owner_ids: fr
         try:
             actor_name = escape(message.from_user.full_name)
             target_name = escape(target.user.full_name)
-            await bot.send_message(chat_id, f"🛡 {actor_name} выполнил действие «{escape(action)}» в отношении {target_name}.")
+            reason_note = f" Причина: {escape(reason)}" if action == "warn" else ""
+            await bot.send_message(chat_id, f"🛡 {actor_name} выполнил действие «{escape(action)}» в отношении {target_name}.{reason_note}")
         except TelegramAPIError:
             pass
     except TelegramAPIError as exc:
