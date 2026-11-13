@@ -243,26 +243,28 @@ async def unmute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[
     if not await bot_can_restrict(message, bot) or not await target_is_restrictable(message, bot, target):
         return
     try:
-        # Explicitly restore messaging permissions. Chat.permissions contains
-        # default group restrictions and may itself have can_send_messages=False;
-        # reapplying it would leave the member muted.
+        # Restore the group's actual default permissions rather than granting
+        # every permission unconditionally. This reliably removes the member-
+        # specific restriction while respecting the group's current settings.
+        chat = await bot.get_chat(message.chat.id)
+        permissions = chat.permissions or ChatPermissions(
+            can_send_messages=True,
+            can_send_audios=True,
+            can_send_documents=True,
+            can_send_photos=True,
+            can_send_videos=True,
+            can_send_video_notes=True,
+            can_send_voice_notes=True,
+            can_send_polls=True,
+            can_send_other_messages=True,
+            can_add_web_page_previews=True,
+            can_manage_topics=False,
+        )
         await bot.restrict_chat_member(
             message.chat.id,
             target.id,
-            permissions=ChatPermissions(
-                can_send_messages=True,
-                can_send_audios=True,
-                can_send_documents=True,
-                can_send_photos=True,
-                can_send_videos=True,
-                can_send_video_notes=True,
-                can_send_voice_notes=True,
-                can_send_polls=True,
-                can_send_other_messages=True,
-                can_add_web_page_previews=True,
-                can_manage_topics=False,
-            ),
-            use_independent_chat_permissions=True,
+            permissions=permissions,
+            use_independent_chat_permissions=False,
         )
         await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "unmute")
         await message.answer(f"🔊 Ограничения сняты: {escape(target.full_name)}.")
