@@ -90,3 +90,23 @@ async def top_reputation_command(message: Message, db: Database):
             name = f"Участник {user_id}"
         lines.append(f"{index}. {name} — <b>{score}</b> ⭐")
     await message.answer("\n".join(lines))
+
+
+@router.message(Command("topactivity"))
+async def top_activity_command(message: Message, db: Database):
+    if message.chat.type == ChatType.PRIVATE:
+        await message.answer("Рейтинг активности доступен в группе.")
+        return
+    leaders = await db.top_activity(message.chat.id)
+    if not leaders:
+        await message.answer("Пока нет данных об активности. Они начнут собираться с этого момента.")
+        return
+    lines = ["📈 <b>Топ активности группы</b>", ""]
+    for index, (user_id, messages) in enumerate(leaders, start=1):
+        try:
+            member = await message.bot.get_chat_member(message.chat.id, user_id)
+            name = escape(member.user.full_name)
+        except Exception:
+            name = f"Участник {user_id}"
+        lines.append(f"{index}. {name} — <b>{messages}</b> сообщений")
+    await message.answer("\\n".join(lines))
