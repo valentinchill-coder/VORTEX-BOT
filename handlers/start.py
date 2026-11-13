@@ -9,6 +9,7 @@ from aiogram.types import Message, CallbackQuery, ChatPermissions
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.db import Database
+from handlers.ranks import get_rank, can_action
 
 router = Router()
 
@@ -205,14 +206,8 @@ MENU_TEXT = {
 }
 
 
-async def user_is_admin(bot: Bot, chat_id: int, user_id: int, owner_ids: frozenset[int]) -> bool:
-    if user_id in owner_ids:
-        return True
-    try:
-        member = await bot.get_chat_member(chat_id, user_id)
-        return member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR)
-    except TelegramAPIError:
-        return False
+async def user_is_admin(db: Database, bot: Bot, chat_id: int, user_id: int, owner_ids: frozenset[int]) -> bool:
+    return await get_rank(db, bot, chat_id, user_id, owner_ids) >= 1
 
 
 @router.message(Command("start"))
@@ -243,7 +238,7 @@ async def cancel_member_selection(message: Message):
 
 
 @router.message(lambda message: message.chat.type != "private" and message.reply_to_message is not None and message.from_user is not None and (message.chat.id, message.from_user.id) in pending_selection)
-async def receive_selected_member(message: Message, bot: Bot, owner_ids: frozenset[int]):
+async def receive_selected_member(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not message.from_user:
         return
     key = (message.chat.id, message.from_user.id)
@@ -251,7 +246,7 @@ async def receive_selected_member(message: Message, bot: Bot, owner_ids: frozens
         return
     pending_selection.discard(key)
 
-    if not await user_is_admin(bot, message.chat.id, message.from_user.id, owner_ids):
+    if not await user_is_admin(db, bot, message.chat.id, message.from_user.id, owner_ids):
         await message.answer("Выбирать участников через это меню могут только администраторы.")
         return
     target = message.reply_to_message.from_user
@@ -274,14 +269,14 @@ async def receive_selected_member(message: Message, bot: Bot, owner_ids: frozens
 
 
 @router.callback_query(lambda query: query.data == "vortex:select_member")
-async def select_member_callback(query: CallbackQuery, bot: Bot, owner_ids: frozenset[int]):
+async def select_member_callback(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not query.message or not query.from_user:
         await query.answer()
         return
     if query.message.chat.type == "private":
         await query.answer("Открой меню в группе.", show_alert=True)
         return
-    if not await user_is_admin(bot, query.message.chat.id, query.from_user.id, owner_ids):
+    if not await user_is_admin(db, bot, query.message.chat.id, query.from_user.id, owner_ids):
         await query.answer("Только для администраторов группы.", show_alert=True)
         return
     pending_selection.add((query.message.chat.id, query.from_user.id))
