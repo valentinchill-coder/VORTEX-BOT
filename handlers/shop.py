@@ -528,7 +528,8 @@ async def shop_ui_callback(query: CallbackQuery, db: Database):
                 return
             await conn.execute("UPDATE wallets SET balance=balance-? WHERE chat_id=? AND user_id=?",
                                (total, query.message.chat.id, query.from_user.id))
-            seller_credit = total * 95 // 100
+            commission = total * 5 // 100
+            seller_credit = total - commission
             await conn.execute("""
                 INSERT INTO wallets(chat_id,user_id,balance) VALUES(?,?,?)
                 ON CONFLICT(chat_id,user_id) DO UPDATE SET balance=wallets.balance+excluded.balance
