@@ -5,7 +5,7 @@ from aiogram.enums import ChatType
 from aiogram.types import Message
 
 from database.db import Database
-from handlers import economy, games, moderation, profile, shop, start
+from handlers import economy, games, moderation, profile, shop, start, private_panel
 
 router = Router()
 
@@ -184,6 +184,12 @@ async def natural_language_request(message: Message, db: Database, bot, owner_id
         return
     intent = parse_intent(message.text or "")
     if intent is None:
+        return
+    if message.chat.type == ChatType.PRIVATE:
+        if intent == "/profile":
+            await private_panel.private_profile_command(message, db)
+        else:
+            await message.answer("В личном чате можно просматривать только свой профиль. Игры, экономика и управление доступны в группах; административные действия — только администраторам.")
         return
     if intent == "__help__":
         await message.answer(
