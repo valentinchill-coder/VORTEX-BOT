@@ -59,8 +59,8 @@ def back_menu():
     keyboard = InlineKeyboardBuilder()
     keyboard.button(text="⬅️ В главное меню", callback_data="vortex:home")
     return keyboard.as_markup()
-\n
-def economy_section_keyboard():
+
+def economy_section_keyboard()
     keyboard = InlineKeyboardBuilder()
     keyboard.button(text="💰 Мой баланс", callback_data="eco:balance")
     keyboard.button(text="🎁 Ежедневная награда", callback_data="eco:daily")
