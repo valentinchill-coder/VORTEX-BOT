@@ -11,7 +11,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 
 from config import load_settings
 from database.db import Database
-from handlers import start, moderation, admin, profile, economy
+from handlers import start, moderation, admin, profile, economy, games
 from middlewares.antiflood import AntiFloodMiddleware
 
 
@@ -45,6 +45,7 @@ def create_dispatcher(db: Database, owner_ids: frozenset[int]) -> Dispatcher:
     dp.include_router(admin.router)
     dp.include_router(profile.router)
     dp.include_router(economy.router)
+    dp.include_router(games.router)
     dp.chat_member.register(
         welcome_new_members,
         ChatMemberUpdatedFilter(JOIN_TRANSITION),
@@ -117,6 +118,10 @@ async def main():
             BotCommand(command="daily", description="Получить ежедневную награду"),
             BotCommand(command="pay", description="Перевести V-coins (ответом)"),
             BotCommand(command="topmoney", description="Топ богачей группы"),
+            BotCommand(command="games", description="Открыть игровой зал"),
+            BotCommand(command="guessgame", description="Начать игру Угадай число"),
+            BotCommand(command="guess", description="Сделать ход в игре"),
+            BotCommand(command="topgames", description="Рейтинг игр группы"),
             BotCommand(command="warn", description="Выдать предупреждение (ответом)"),
             BotCommand(command="warnings", description="Посмотреть предупреждения (ответом)"),
             BotCommand(command="clearwarns", description="Очистить предупреждения (ответом)"),
