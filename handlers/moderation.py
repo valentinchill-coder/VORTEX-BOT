@@ -38,6 +38,41 @@ async def target_from_reply(message: Message):
         return None
     return target
 
+async def target_from_reply_or_username(message: Message, db: Database, bot: Bot):
+    """Resolve a moderation target from a replied-to message or a known group username."""
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target = message.reply_to_message.from_user
+    else:
+        parts = (message.text or "").split(maxsplit=1)
+        username = parts[1].strip().split()[0] if len(parts) > 1 else ""
+        if not re.fullmatch(r"@[a-zA-Z0-9_]{5,32}", username):
+            await message.answer("Ответь на сообщение участника или укажи @username: /unmute @username")
+            return None
+        target_id = await db.find_user_id_by_username(message.chat.id, username)
+        if target_id is None:
+            await message.answer(
+                "Не нашёл однозначного участника по этому username. "
+                "Бот должен был видеть пользователя в группе до этого; проверь @username."
+            )
+            return None
+        try:
+            member = await bot.get_chat_member(message.chat.id, target_id)
+        except TelegramAPIError as exc:
+            await message.answer(f"Не удалось проверить участника: {exc.message}")
+            return None
+        target = member.user
+        if (target.username or "").casefold() != username[1:].casefold():
+            await message.answer("Username изменился. Укажи актуальный @username.")
+            return None
+
+    if message.from_user and target.id == message.from_user.id:
+        await message.answer("Нельзя применять это действие к самому себе.")
+        return None
+    if target.is_bot:
+        await message.answer("Нельзя применить это действие к боту.")
+        return None
+    return target
+
 
 async def check_admin(message: Message, bot: Bot, owner_ids: frozenset[int]) -> bool:
     try:
@@ -202,7 +237,7 @@ async def mute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
 async def unmute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not await rank_denial(message, db, bot, owner_ids, "unmute"):
         return
-    target = await target_from_reply(message)
+    target = await target_from_reply_or_username(message, db, bot)
     if not target:
         return
     if not await bot_can_restrict(message, bot) or not await target_is_restrictable(message, bot, target):
