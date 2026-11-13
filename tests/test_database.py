@@ -60,6 +60,29 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             "balance": 100,
         })
 
+    async def test_daily_quest_progress_and_rewards_are_claimed_once(self):
+        for _ in range(10):
+            await self.db.register_message(-1001, 10, "tester", "Test User")
+        await self.db.add_game_result(-1001, 10, 0, True)
+        await self.db.add_game_result(-1001, 10, 0, False)
+        await self.db.add_game_result(-1001, 10, 0, False)
+
+        progress = await self.db.daily_quest_progress(-1001, 10)
+        self.assertEqual(progress, {"messages": 10, "games": 3, "wins": 1})
+
+        rules = [
+            ("messages_10", "messages", 10, 10),
+            ("games_3", "games", 3, 15),
+            ("win_1", "wins", 1, 10),
+        ]
+        claimed, balance = await self.db.claim_daily_quest_rewards(-1001, 10, rules)
+        self.assertEqual(set(claimed), {"messages_10", "games_3", "win_1"})
+        self.assertEqual(balance, 35)
+
+        claimed_again, balance_again = await self.db.claim_daily_quest_rewards(-1001, 10, rules)
+        self.assertEqual(claimed_again, [])
+        self.assertEqual(balance_again, 35)
+
     async def test_activity_profile_and_stats(self):
         await self.db.register_message(-1001, 10, "tester", "Test User")
         await self.db.register_message(-1001, 10, "tester", "Test User")
