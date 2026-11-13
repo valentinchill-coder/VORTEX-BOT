@@ -118,6 +118,10 @@ async def handle_natural_rank(message: Message, db: Database, bot: Bot,
         return
 
     await db.set_moderation_rank(message.chat.id, target.id, new_rank, message.from_user.id)
+    await db.log_moderation_action(
+        message.chat.id, message.from_user.id, target.id,
+        "rank_change", f"{current} -> {new_rank}",
+    )
     if new_rank == 0:
         await message.answer(f"Ранг пользователя {escape(target.full_name)} снят.")
     else:
@@ -177,6 +181,10 @@ async def setrank_command(message: Message, db: Database, bot: Bot,
         await message.answer("Главный модератор может назначать только ранги 1–3.")
         return
     await db.set_moderation_rank(message.chat.id, target.id, new_rank, message.from_user.id)
+    await db.log_moderation_action(
+        message.chat.id, message.from_user.id, target.id,
+        "rank_change", f"{target_rank} -> {new_rank}",
+    )
     if new_rank == 0:
         await message.answer(f"Ранг пользователя {escape(target.full_name)} снят.")
     else:
