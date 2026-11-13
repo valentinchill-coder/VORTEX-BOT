@@ -110,3 +110,80 @@ async def top_activity_command(message: Message, db: Database):
             name = f"Участник {user_id}"
         lines.append(f"{index}. {name} — <b>{messages}</b> сообщений")
     await message.answer("\n".join(lines))
+
+
+# Profile and reputation menu buttons.
+from aiogram.types import CallbackQuery
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+_profile_pending_rep: set[tuple[int, int]] = set()
+
+def profile_keyboard():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="👤 Мой профиль", callback_data="profile:me")
+    kb.button(text="⭐ Топ репутации", callback_data="profile:toprep")
+    kb.button(text="📈 Топ активности", callback_data="profile:topactivity")
+    kb.button(text="⭐ Выдать репутацию", callback_data="profile:give")
+    kb.button(text="⬅️ Главное меню", callback_data="vortex:home")
+    kb.adjust(1)
+    return kb.as_markup()
+
+@router.callback_query(lambda q: q.data and q.data.startswith("profile:"))
+async def profile_button_callback(query: CallbackQuery, db: Database):
+    if not query.message or not query.from_user:
+        await query.answer()
+        return
+    if query.message.chat.type == ChatType.PRIVATE:
+        await query.answer("Профили доступны в группе.", show_alert=True)
+        return
+    action = query.data.split(":", 1)[1]
+    if action == "give":
+        _profile_pending_rep.add((query.message.chat.id, query.from_user.id))
+        await query.message.answer("⭐ Чтобы выдать +1 репутацию, ответь любым сообщением на сообщение участника.")
+    elif action == "me":
+        data = await db.get_profile(query.message.chat.id, query.from_user.id)
+        user = data["user"] or {}
+        messages = int(user.get("message_count", 0))
+        username = f"@{escape(query.from_user.username)}" if query.from_user.username else "не указан"
+        first_seen = user.get("first_seen", "пока нет данных")[:10]
+        await query.message.answer(
+            f"👤 <b>Твой профиль</b>\\n\\nИмя: <b>{escape(query.from_user.full_name)}</b>\\n"
+            f"Username: {username}\\nРанг: {_rank(messages)}\\nСообщений: <b>{messages}</b>\\n"
+            f"Репутация: <b>{data['reputation']}</b>\\nПредупреждений: <b>{data['warnings']}</b>\\n"
+            f"В чате с: {first_seen}"
+        )
+    elif action in ("toprep", "topactivity"):
+        rows = await (db.top_reputation(query.message.chat.id) if action == "toprep"
+                      else db.top_activity(query.message.chat.id))
+        lines = ["🏆 <b>Топ репутации</b>" if action == "toprep" else "📈 <b>Топ активности</b>", ""]
+        for i, (uid, score) in enumerate(rows, 1):
+            try:
+                member = await query.bot.get_chat_member(query.message.chat.id, uid)
+                name = escape(member.user.full_name)
+            except Exception:
+                name = f"Участник {uid}"
+            suffix = "⭐" if action == "toprep" else "сообщений"
+            lines.append(f"{i}. {name} — <b>{score}</b> {suffix}")
+        await query.message.answer("\\n".join(lines) if rows else "Пока данных нет.")
+    await query.answer()
+
+@router.message(lambda m: m.from_user is not None and m.chat.type != ChatType.PRIVATE
+                and (m.chat.id, m.from_user.id) in _profile_pending_rep)
+async def give_reputation_plain(message: Message, db: Database):
+    if not message.from_user:
+        return
+    target_message = message.reply_to_message
+    if not target_message or not target_message.from_user:
+        await message.answer("Ответь на сообщение того, кому хочешь выдать репутацию.")
+        return
+    target, giver = target_message.from_user, message.from_user
+    if target.is_bot or target.id == giver.id:
+        await message.answer("Нельзя выдавать репутацию себе или ботам.")
+        return
+    granted = await db.give_reputation(message.chat.id, target.id, giver.id)
+    if granted:
+        _profile_pending_rep.discard((message.chat.id, giver.id))
+        await message.answer(f"⭐ {escape(target.full_name)} получил +1 к репутации!")
+    else:
+        _profile_pending_rep.discard((message.chat.id, giver.id))
+        await message.answer("Ты уже выдавал этому участнику репутацию сегодня.")
