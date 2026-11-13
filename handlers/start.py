@@ -26,9 +26,21 @@ def main_menu():
     keyboard.button(text="👤 Профиль", callback_data="vortex:profile")
     keyboard.button(text="⭐ Репутация", callback_data="vortex:reputation")
     keyboard.button(text="💰 Экономика", callback_data="vortex:economy")
+    keyboard.button(text="🎮 Игры", callback_data="vortex:games")
     keyboard.button(text="👋 Приветствие", callback_data="vortex:welcome")
     keyboard.button(text="📖 Все команды", callback_data="vortex:commands")
-    keyboard.adjust(2, 2, 2, 2, 2)
+    keyboard.adjust(2, 2, 2, 2, 2, 1)
+    return keyboard.as_markup()
+
+
+def games_menu():
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="🔢 Угадай число", callback_data="game:start:guess")
+    keyboard.button(text="✊ Камень, ножницы, бумага", callback_data="game:start:rps")
+    keyboard.button(text="🧠 Викторина", callback_data="game:start:quiz")
+    keyboard.button(text="🏆 Рейтинг игр", callback_data="game:top")
+    keyboard.button(text="⬅️ В главное меню", callback_data="vortex:home")
+    keyboard.adjust(1)
     return keyboard.as_markup()
 
 
@@ -98,6 +110,14 @@ MENU_TEXT = {
         "Ответь командой /pay 50 на сообщение участника, чтобы перевести ему 50 монет.\n"
         "/topmoney — рейтинг богачей группы"
     ),
+    "games": (
+        "🎮 <b>Игровой зал VORTEX</b>\n\n"
+        "Играй прямо в группе, зарабатывай игровые очки и поднимайся в рейтинге.\n"
+        "🔢 Угадай число — найди число от 1 до 100 за 7 попыток (+10 очков).\n"
+        "✊ Камень, ножницы, бумага — сыграй против бота (до +5 очков).\n"
+        "🧠 Викторина — отвечай на вопросы (+3 очка за правильный ответ).\n\n"
+        "Игровые очки отдельны от V-coins. Команда /topgames покажет рейтинг."
+    ),
     "welcome": (
         "👋 <b>Приветствие</b>\n\n"
         "Бот автоматически приветствует новых участников, когда они вступают в группу."
@@ -121,6 +141,10 @@ MENU_TEXT = {
         "/daily — ежедневная награда\n"
         "/pay — перевод монет (ответом)\n"
         "/topmoney — топ богачей\n"
+        "/games — игровой зал\n"
+        "/guessgame — начать Угадай число\n"
+        "/guess 50 — сделать ход\n"
+        "/topgames — рейтинг игр\n"
         "/stats — статистика группы"
     ),
 }
@@ -302,6 +326,8 @@ async def menu_callback(query: CallbackQuery):
             "Выбери нужный раздел в меню:"
         )
         await query.message.edit_text(text, reply_markup=main_menu())
+    elif section == "games":
+        await query.message.edit_text(MENU_TEXT[section], reply_markup=games_menu())
     elif section in MENU_TEXT:
         await query.message.edit_text(MENU_TEXT[section], reply_markup=back_menu())
     await query.answer()
