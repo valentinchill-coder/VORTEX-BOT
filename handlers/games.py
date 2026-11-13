@@ -287,3 +287,34 @@ async def top_games_command(message: Message, db: Database):
         await message.answer("Рейтинг доступен в группе.")
         return
     await _send_top_games(message, db)
+
+
+# Allow the active "guess the number" round to accept a plain numeric message.
+@router.message(lambda m: m.chat.type != ChatType.PRIVATE and m.from_user is not None
+                and (m.chat.id, m.from_user.id) in _guess_games
+                and (m.text or "").strip().isdigit()
+                and not (m.text or "").startswith("/"))
+async def guess_plain_text(message: Message, db: Database):
+    if not message.from_user:
+        return
+    key = (message.chat.id, message.from_user.id)
+    game = _guess_games.get(key)
+    if not game:
+        return
+    guess = int((message.text or "").strip())
+    if not 1 <= guess <= 100:
+        await message.answer("Введи число от 1 до 100.")
+        return
+    game["attempts"] -= 1
+    target = game["number"]
+    if guess == target:
+        _guess_games.pop(key, None)
+        points, wins, played = await db.add_game_result(message.chat.id, message.from_user.id, 10, True)
+        await message.answer(f"🎉 Верно! Это было {target}. Начислено +10 игровых очков. Твой счёт: {points}.")
+    elif game["attempts"] <= 0:
+        _guess_games.pop(key, None)
+        await db.add_game_result(message.chat.id, message.from_user.id, 0, False)
+        await message.answer(f"Попытки закончились! Загаданное число: {target}.")
+    else:
+        hint = "больше" if guess < target else "меньше"
+        await message.answer(f"Не угадал, моё число {hint}. Осталось попыток: {game['attempts']}.")
