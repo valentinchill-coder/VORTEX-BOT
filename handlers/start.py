@@ -370,7 +370,7 @@ async def member_action_callback(
                     can_send_photos=True, can_send_videos=True, can_send_video_notes=True,
                     can_send_voice_notes=True, can_send_polls=True,
                     can_send_other_messages=True, can_add_web_page_previews=True,
-                    can_manage_topics=True,
+                    can_manage_topics=False,
                 ),
             )
             result = f"🔊 Ограничения сняты: {escape(target.full_name)}."
