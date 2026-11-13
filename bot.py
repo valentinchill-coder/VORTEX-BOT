@@ -162,7 +162,10 @@ async def main():
     await db.connect()
     await initialize_shop(db)
     dp = create_dispatcher(db, settings.owner_ids)
-    await notify_audit_ready(bot, db, settings.owner_ids)
+    try:
+        await notify_audit_ready(bot, db, settings.owner_ids)
+    except Exception:
+        logging.exception("Readiness notification failed; continuing bot startup")
 
     try:
         me = await bot.get_me()
