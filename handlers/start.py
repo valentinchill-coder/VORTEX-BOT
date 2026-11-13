@@ -235,12 +235,21 @@ async def help_command(message: Message):
     )
 
 
-@router.message(Command("cancel"), lambda m: m.chat.type != "private" and m.from_user is not None
-                and (m.chat.id, m.from_user.id) in pending_selection)
+@router.message(Command("cancel"), lambda m: m.chat.type != "private" and m.from_user is not None)
 async def cancel_member_selection(message: Message):
-    if message.from_user:
-        pending_selection.discard((message.chat.id, message.from_user.id))
-    await message.answer("Выбор участника отменён.")
+    if not message.from_user:
+        return
+    # Clear every pending group flow so an older prompt cannot consume the next message.
+    from handlers import economy, games, profile, shop
+    key = (message.chat.id, message.from_user.id)
+    pending_selection.discard(key)
+    profile._profile_pending_rep.discard(key)
+    economy._economy_pending.pop(key, None)
+    games._guess_games.pop(key, None)
+    games._rps_rounds.pop(key, None)
+    games._quiz_rounds.pop(key, None)
+    shop._pending_shop_action.pop(key, None)
+    await message.answer("Все ожидающие операции и текущая игра отменены.")
 
 
 @router.message(lambda message: message.chat.type != "private" and message.reply_to_message is not None and message.from_user is not None and (message.chat.id, message.from_user.id) in pending_selection)
