@@ -585,7 +585,7 @@ async def _render_filters(query: CallbackQuery, chat_id: int, db: Database, bot:
     kb.button(text=f"Запрещённые слова: {'ВКЛ' if settings['word_filter_enabled']=='1' else 'ВЫКЛ'}", callback_data=f"vp:filtertoggle:{chat_id}:word_filter_enabled")
     kb.button(text="➕ Добавить слово/фразу", callback_data=f"vp:filteradd:{chat_id}")
     for word in words[:12]:
-        kb.button(text=f"❌ {word[:28]}", callback_data=f"vp:filterremove:{chat_id}:{word}")
+        kb.button(text=f"❌ {word[:28]}", callback_data=f"vp:filterremove:{chat_id}:{words.index(word)}")
     kb.button(text="⬅️ Назад", callback_data=f"vp:group:{chat_id}")
     kb.adjust(1)
     word_text = "\n".join(f"• {escape(w)}" for w in words) if words else "Список пуст."
@@ -665,7 +665,14 @@ async def remove_filter_word(query: CallbackQuery, bot: Bot, db: Database, owner
     if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
         await _safe_query_answer(query, "Доступ запрещён.", show_alert=True)
         return
-    await db.remove_blocked_word(chat_id, parts[3])
+    words = await db.list_blocked_words(chat_id)
+    try:
+        index = int(parts[3])
+        word = words[index]
+    except (ValueError, IndexError):
+        await _safe_query_answer(query, "Слово уже удалено или список изменился.", show_alert=True)
+        return
+    await db.remove_blocked_word(chat_id, word, query.from_user.id)
     await _render_filters(query, chat_id, db, bot, owner_ids)
     await _safe_query_answer(query, "Слово удалено из списка.")
 
