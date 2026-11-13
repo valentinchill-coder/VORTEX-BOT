@@ -4,7 +4,7 @@ from html import escape
 import aiosqlite
 from aiogram import Bot, Router
 from aiogram.enums import ChatMemberStatus
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, ChatPermissions
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -12,6 +12,14 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from database.db import Database
 
 router = Router()
+
+
+async def _safe_edit(message: Message, text: str, reply_markup=None) -> None:
+    try:
+        await message.edit_text(text, reply_markup=reply_markup)
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in exc.message.lower():
+            raise
 pending_action: dict[int, tuple[int, str]] = {}
 
 
@@ -219,9 +227,9 @@ async def show_groups(query: CallbackQuery, bot: Bot, db: Database, owner_ids: f
         except TelegramAPIError:
             pass
     if groups:
-        await query.message.edit_text("Выбери беседу для управления:", reply_markup=groups_keyboard(groups))
+        await _safe_edit(query.message, "Выбери беседу для управления:", reply_markup=groups_keyboard(groups))
     else:
-        await query.message.edit_text("Нет доступных групп.")
+        await _safe_edit(query.message, "Нет доступных групп.")
     await query.answer()
 
 
@@ -244,7 +252,7 @@ async def open_group(query: CallbackQuery, bot: Bot, db: Database, owner_ids: fr
     except TelegramAPIError:
         title = str(chat_id)
     data = await db.chat_stats(chat_id)
-    await query.message.edit_text(
+    await _safe_edit(query.message, 
         f"🌪 <b>{title}</b>\nID: <code>{chat_id}</code>\n\n"
         f"Участников с активностью: <b>{data['users']}</b>\n"
         f"Сообщений учтено: <b>{data['messages']}</b>\n"
@@ -270,7 +278,7 @@ async def group_stats(query: CallbackQuery, bot: Bot, db: Database, owner_ids: f
         await query.answer("Доступ запрещён.", show_alert=True)
         return
     data = await db.chat_stats(chat_id)
-    await query.message.edit_text(
+    await _safe_edit(query.message, 
         "📊 <b>Статистика беседы</b>\n\n"
         f"Участников с активностью: <b>{data['users']}</b>\n"
         f"Сообщений: <b>{data['messages']}</b>\n"
@@ -303,7 +311,7 @@ async def group_top(query: CallbackQuery, bot: Bot, db: Database, owner_ids: fro
         except TelegramAPIError:
             name = f"ID {user_id}"
         lines.append(f"{index}. {name} — {count} сообщ.")
-    await query.message.edit_text(
+    await _safe_edit(query.message, 
         "🏆 <b>Топ активности</b>\n\n" + ("\n".join(lines) if lines else "Пока нет данных."),
         reply_markup=group_keyboard(chat_id),
     )
@@ -323,7 +331,7 @@ async def moderation_menu(query: CallbackQuery, bot: Bot, owner_ids: frozenset[i
     if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
         await query.answer("Доступ запрещён.", show_alert=True)
         return
-    await query.message.edit_text(
+    await _safe_edit(query.message, 
         "🛡 <b>Модерация из личного чата</b>\n\n"
         "Выбери действие, затем отправь Telegram ID участника одним сообщением. "
         "Для отмены отправь /cancel.",
