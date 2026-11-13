@@ -1,9 +1,10 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from html import escape
 
 from aiogram import Bot, Router
 from aiogram.enums import ChatMemberStatus
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramRetryAfter
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, ChatPermissions
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -20,6 +21,14 @@ async def _safe_edit(message: Message, text: str, reply_markup=None) -> None:
     except TelegramBadRequest as exc:
         if "message is not modified" not in exc.message.lower():
             raise
+
+async def _safe_answer(message: Message, text: str, **kwargs) -> None:
+    """Retry a user-facing reply once when Telegram applies temporary flood control."""
+    try:
+        await message.answer(text, **kwargs)
+    except TelegramRetryAfter as exc:
+        await asyncio.sleep(max(1, exc.retry_after))
+        await message.answer(text, **kwargs)
 
 # Pending participant selection: (chat_id, admin_id)
 pending_selection: set[tuple[int, int]] = set()
@@ -218,7 +227,7 @@ async def user_is_admin(db: Database, bot: Bot, chat_id: int, user_id: int, owne
 
 @router.message(Command("start"))
 async def start_command(message: Message):
-    await message.answer(
+    await _safe_answer(message,
         "🌪 <b>VORTEX BOT</b>\n"
         "Твой помощник по управлению Telegram-группой.\n\n"
         "Выбери нужный раздел в меню:",
@@ -228,7 +237,7 @@ async def start_command(message: Message):
 
 @router.message(Command("help"))
 async def help_command(message: Message):
-    await message.answer(
+    await _safe_answer(message,
         "📖 <b>Справка VORTEX BOT</b>\n\n"
         "Выбери раздел в меню ниже. Действия модерации доступны по рангу VORTEX.",
         reply_markup=main_menu(),
