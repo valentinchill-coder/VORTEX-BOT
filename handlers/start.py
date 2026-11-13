@@ -226,6 +226,14 @@ async def help_command(message: Message):
     )
 
 
+@router.message(Command("cancel"), lambda m: m.chat.type != "private" and m.from_user is not None
+                and (m.chat.id, m.from_user.id) in pending_selection)
+async def cancel_member_selection(message: Message):
+    if message.from_user:
+        pending_selection.discard((message.chat.id, message.from_user.id))
+    await message.answer("Выбор участника отменён.")
+
+
 @router.message(lambda message: message.chat.type != "private" and message.reply_to_message is not None and message.from_user is not None and (message.chat.id, message.from_user.id) in pending_selection)
 async def receive_selected_member(message: Message, bot: Bot, owner_ids: frozenset[int]):
     if not message.from_user:
