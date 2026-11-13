@@ -1,4 +1,5 @@
 import aiosqlite
+import re
 from datetime import datetime, timedelta, timezone
 
 
@@ -281,6 +282,20 @@ class Database:
                     messages=daily_activity.messages+1
             """, (chat_id, user_id, now[:10]))
             await db.commit()
+
+    async def find_user_id_by_username(self, chat_id: int, username: str) -> int | None:
+        """Find one unambiguous group member by their last observed Telegram username."""
+        value = username.strip().removeprefix("@").casefold()
+        if not value or not re.fullmatch(r"[a-z0-9_]{5,32}", value):
+            return None
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "SELECT user_id FROM users WHERE chat_id=? AND lower(username)=? "
+                "ORDER BY last_seen DESC LIMIT 2",
+                (chat_id, value),
+            )
+            rows = await cur.fetchall()
+        return int(rows[0][0]) if len(rows) == 1 else None
 
     async def get_profile(self, chat_id: int, user_id: int) -> dict:
         async with aiosqlite.connect(self.path) as db:
