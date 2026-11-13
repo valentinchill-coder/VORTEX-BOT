@@ -56,7 +56,7 @@ def parse_intent(text: str) -> str | None:
     if re.search(r"\b(выдать ранг|назначить ранг|поставить ранг)\b", value):
         return "__rank_usage__"
 
-    if re.search(r"\\b(мои достижения|покажи достижения|список достижений)\\b", value):
+    if re.search(r"\b(мои достижения|покажи достижения|список достижений)\b", value):
         return "/achievements"
 
     # Read-only information and navigation.
