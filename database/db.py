@@ -23,6 +23,15 @@ class Database:
                 )
             """)
             await db.execute("""
+                CREATE TABLE IF NOT EXISTS blocked_words (
+                    chat_id INTEGER NOT NULL,
+                    word TEXT NOT NULL,
+                    added_by INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(chat_id, word)
+                )
+            """)
+            await db.execute("""
                 CREATE TABLE IF NOT EXISTS warnings (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     chat_id INTEGER NOT NULL,
@@ -649,7 +658,7 @@ class Database:
 
 
     async def get_chat_settings(self, chat_id: int) -> dict[str, str]:
-        defaults = {"antiflood_enabled": "1", "antiflood_limit": "6", "antiflood_window": "8"}
+        defaults = {"antiflood_enabled": "1", "antiflood_limit": "6", "antiflood_window": "8", "link_filter_enabled": "0", "word_filter_enabled": "0"}
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute("SELECT setting_key,setting_value FROM chat_settings WHERE chat_id=?", (chat_id,))
             for key, value in await cursor.fetchall():
@@ -665,3 +674,25 @@ class Database:
             await db.execute("""INSERT INTO chat_settings(chat_id,setting_key,setting_value,updated_by,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(chat_id,setting_key) DO UPDATE SET setting_value=excluded.setting_value, updated_by=excluded.updated_by, updated_at=excluded.updated_at""", (chat_id, key, str(value), actor_id, _now()))
             await db.commit()
         await self.log_moderation_action(chat_id, actor_id, 0, "setting_change", f"{key}={value}")
+
+
+    async def add_blocked_word(self, chat_id: int, word: str, actor_id: int) -> bool:
+        word = " ".join(word.strip().split()).casefold()
+        if not word or len(word) > 32 or len(word.split()) > 3:
+            raise ValueError("Word or phrase must be 1-32 characters and at most 3 words.")
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute("INSERT OR IGNORE INTO blocked_words(chat_id,word,added_by,created_at) VALUES(?,?,?,?)", (chat_id, word, actor_id, _now()))
+            await db.commit()
+            return cursor.rowcount > 0
+
+    async def remove_blocked_word(self, chat_id: int, word: str) -> bool:
+        word = " ".join(word.strip().split()).casefold()
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute("DELETE FROM blocked_words WHERE chat_id=? AND word=?", (chat_id, word))
+            await db.commit()
+            return cursor.rowcount > 0
+
+    async def list_blocked_words(self, chat_id: int) -> list[str]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute("SELECT word FROM blocked_words WHERE chat_id=? ORDER BY word LIMIT 30", (chat_id,))
+            return [str(row[0]) for row in await cursor.fetchall()]
