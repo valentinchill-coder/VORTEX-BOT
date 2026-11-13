@@ -20,6 +20,16 @@ async def _safe_edit(message: Message, text: str, reply_markup=None) -> None:
     except TelegramBadRequest as exc:
         if "message is not modified" not in exc.message.lower():
             raise
+
+async def _safe_query_answer(query: CallbackQuery, *args, **kwargs) -> None:
+    """Ignore expired callback-query acknowledgements; surface other API errors."""
+    try:
+        await query.answer(*args, **kwargs)
+    except TelegramBadRequest as exc:
+        message = exc.message.lower()
+        if "query is too old" not in message and "query id is invalid" not in message:
+            raise
+
 pending_action: dict[int, tuple[int, str]] = {}
 
 
@@ -91,7 +101,7 @@ async def user_profile_groups(db: Database, user_id: int):
 @router.callback_query(lambda q: q.data == "vp:myprofile")
 async def choose_profile_group(query: CallbackQuery, db: Database):
     if not query.message or not query.from_user or query.message.chat.type != "private":
-        await query.answer()
+        await _safe_query_answer(query,)
         return
     groups = []
     for chat_id in await user_profile_groups(db, query.from_user.id):
@@ -104,23 +114,23 @@ async def choose_profile_group(query: CallbackQuery, db: Database):
         await query.message.answer("Выбери группу для просмотра своего профиля:", reply_markup=profile_groups_keyboard(groups))
     else:
         await query.message.answer("Пока нет данных профиля. Напиши несколько сообщений в группе, где работает VORTEX.")
-    await query.answer()
+    await _safe_query_answer(query,)
 
 
 @router.callback_query(lambda q: q.data and q.data.startswith("vp:myprofile:"))
 async def show_private_profile(query: CallbackQuery, bot: Bot, db: Database):
     if not query.message or not query.from_user or query.message.chat.type != "private":
-        await query.answer()
+        await _safe_query_answer(query,)
         return
     try:
         chat_id = int(query.data.rsplit(":", 1)[1])
     except ValueError:
-        await query.answer("Некорректная группа.", show_alert=True)
+        await _safe_query_answer(query,"Некорректная группа.", show_alert=True)
         return
     async with aiosqlite.connect(db.path) as conn:
         cur = await conn.execute("SELECT 1 FROM users WHERE chat_id=? AND user_id=?", (chat_id, query.from_user.id))
         if not await cur.fetchone():
-            await query.answer("Профиль не найден.", show_alert=True)
+            await _safe_query_answer(query,"Профиль не найден.", show_alert=True)
             return
         cur = await conn.execute("SELECT points,wins,played FROM game_stats WHERE chat_id=? AND user_id=?", (chat_id, query.from_user.id))
         game = await cur.fetchone() or (0, 0, 0)
@@ -129,11 +139,11 @@ async def show_private_profile(query: CallbackQuery, bot: Bot, db: Database):
     try:
         member = await bot.get_chat_member(chat_id, query.from_user.id)
         if member.status in (ChatMemberStatus.LEFT, ChatMemberStatus.KICKED):
-            await query.answer("Ты больше не состоишь в этой группе.", show_alert=True)
+            await _safe_query_answer(query,"Ты больше не состоишь в этой группе.", show_alert=True)
             return
         chat = await bot.get_chat(chat_id)
     except TelegramAPIError:
-        await query.answer("Не удалось проверить участие в группе.", show_alert=True)
+        await _safe_query_answer(query,"Не удалось проверить участие в группе.", show_alert=True)
         return
     data = await db.get_profile(chat_id, query.from_user.id)
     user = data["user"] or {}
@@ -152,7 +162,7 @@ async def show_private_profile(query: CallbackQuery, bot: Bot, db: Database):
         f"🏆 Побед: <b>{game[1]}</b> из {game[2]} игр\n"
         f"🎒 Инвентарь: " + (", ".join(items) if items else "пуст")
     )
-    await query.answer()
+    await _safe_query_answer(query,)
 
 
 @router.message(Command("start"), lambda m: m.chat.type == "private")
@@ -215,7 +225,7 @@ async def block_private_commands(message: Message):
 @router.callback_query(lambda q: q.data == "vp:groups")
 async def show_groups(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not query.message or not query.from_user or query.message.chat.type != "private":
-        await query.answer()
+        await _safe_query_answer(query,)
         return
     groups = []
     for chat_id in await known_groups(db):
@@ -230,21 +240,21 @@ async def show_groups(query: CallbackQuery, bot: Bot, db: Database, owner_ids: f
         await _safe_edit(query.message, "Выбери беседу для управления:", reply_markup=groups_keyboard(groups))
     else:
         await _safe_edit(query.message, "Нет доступных групп.")
-    await query.answer()
+    await _safe_query_answer(query,)
 
 
 @router.callback_query(lambda q: q.data and q.data.startswith("vp:group:"))
 async def open_group(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not query.message or not query.from_user or query.message.chat.type != "private":
-        await query.answer()
+        await _safe_query_answer(query,)
         return
     try:
         chat_id = int(query.data.rsplit(":", 1)[1])
     except ValueError:
-        await query.answer("Некорректная группа.", show_alert=True)
+        await _safe_query_answer(query,"Некорректная группа.", show_alert=True)
         return
     if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
-        await query.answer("Доступ запрещён: нужны права администратора группы.", show_alert=True)
+        await _safe_query_answer(query,"Доступ запрещён: нужны права администратора группы.", show_alert=True)
         return
     try:
         chat = await bot.get_chat(chat_id)
@@ -261,21 +271,21 @@ async def open_group(query: CallbackQuery, bot: Bot, db: Database, owner_ids: fr
         "Выбери раздел управления:",
         reply_markup=group_keyboard(chat_id),
     )
-    await query.answer()
+    await _safe_query_answer(query,)
 
 
 @router.callback_query(lambda q: q.data and q.data.startswith("vp:stats:"))
 async def group_stats(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not query.message or not query.from_user or query.message.chat.type != "private":
-        await query.answer()
+        await _safe_query_answer(query,)
         return
     try:
         chat_id = int(query.data.rsplit(":", 1)[1])
     except (ValueError, IndexError):
-        await query.answer("Некорректная группа.", show_alert=True)
+        await _safe_query_answer(query,"Некорректная группа.", show_alert=True)
         return
     if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
-        await query.answer("Доступ запрещён.", show_alert=True)
+        await _safe_query_answer(query,"Доступ запрещён.", show_alert=True)
         return
     data = await db.chat_stats(chat_id)
     await _safe_edit(query.message, 
@@ -286,21 +296,21 @@ async def group_stats(query: CallbackQuery, bot: Bot, db: Database, owner_ids: f
         f"Антифлуд: <b>{data['antiflood']}</b>",
         reply_markup=group_keyboard(chat_id),
     )
-    await query.answer()
+    await _safe_query_answer(query,)
 
 
 @router.callback_query(lambda q: q.data and q.data.startswith("vp:top:"))
 async def group_top(query: CallbackQuery, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not query.message or not query.from_user or query.message.chat.type != "private":
-        await query.answer()
+        await _safe_query_answer(query,)
         return
     try:
         chat_id = int(query.data.rsplit(":", 1)[1])
     except (ValueError, IndexError):
-        await query.answer("Некорректная группа.", show_alert=True)
+        await _safe_query_answer(query,"Некорректная группа.", show_alert=True)
         return
     if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
-        await query.answer("Доступ запрещён.", show_alert=True)
+        await _safe_query_answer(query,"Доступ запрещён.", show_alert=True)
         return
     rows = await db.top_activity(chat_id, 10)
     lines = []
@@ -315,21 +325,21 @@ async def group_top(query: CallbackQuery, bot: Bot, db: Database, owner_ids: fro
         "🏆 <b>Топ активности</b>\n\n" + ("\n".join(lines) if lines else "Пока нет данных."),
         reply_markup=group_keyboard(chat_id),
     )
-    await query.answer()
+    await _safe_query_answer(query,)
 
 
 @router.callback_query(lambda q: q.data and q.data.startswith("vp:mod:"))
 async def moderation_menu(query: CallbackQuery, bot: Bot, owner_ids: frozenset[int]):
     if not query.message or not query.from_user or query.message.chat.type != "private":
-        await query.answer()
+        await _safe_query_answer(query,)
         return
     try:
         chat_id = int(query.data.rsplit(":", 1)[1])
     except (ValueError, IndexError):
-        await query.answer("Некорректная группа.", show_alert=True)
+        await _safe_query_answer(query,"Некорректная группа.", show_alert=True)
         return
     if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
-        await query.answer("Доступ запрещён.", show_alert=True)
+        await _safe_query_answer(query,"Доступ запрещён.", show_alert=True)
         return
     await _safe_edit(query.message, 
         "🛡 <b>Модерация из личного чата</b>\n\n"
@@ -337,37 +347,37 @@ async def moderation_menu(query: CallbackQuery, bot: Bot, owner_ids: frozenset[i
         "Для отмены отправь /cancel.",
         reply_markup=moderation_keyboard(chat_id),
     )
-    await query.answer()
+    await _safe_query_answer(query,)
 
 
 @router.callback_query(lambda q: q.data and q.data.startswith("vp:action:"))
 async def choose_action(query: CallbackQuery, bot: Bot, owner_ids: frozenset[int]):
     if not query.message or not query.from_user or query.message.chat.type != "private":
-        await query.answer()
+        await _safe_query_answer(query,)
         return
     parts = query.data.split(":")
     if len(parts) != 4:
-        await query.answer("Некорректное действие.", show_alert=True)
+        await _safe_query_answer(query,"Некорректное действие.", show_alert=True)
         return
     _, _, action, chat_id_raw = parts
     allowed_actions = {"warn", "mute", "unmute", "kick", "ban", "clearwarns"}
     if action not in allowed_actions:
-        await query.answer("Неизвестное действие.", show_alert=True)
+        await _safe_query_answer(query,"Неизвестное действие.", show_alert=True)
         return
     try:
         chat_id = int(chat_id_raw)
     except ValueError:
-        await query.answer("Некорректная группа.", show_alert=True)
+        await _safe_query_answer(query,"Некорректная группа.", show_alert=True)
         return
     if not await allowed(bot, query.from_user.id, chat_id, owner_ids):
-        await query.answer("Доступ запрещён.", show_alert=True)
+        await _safe_query_answer(query,"Доступ запрещён.", show_alert=True)
         return
     pending_action[query.from_user.id] = (chat_id, action)
     await query.message.answer(
         f"Отправь Telegram ID участника для действия «{action}».\n"
         "Отмена: /cancel"
     )
-    await query.answer()
+    await _safe_query_answer(query,)
 
 
 @router.message(Command("cancel"), lambda m: m.chat.type == "private")
