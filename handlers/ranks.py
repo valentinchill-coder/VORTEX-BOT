@@ -265,4 +265,4 @@ async def admins_command(message: Message, db: Database, bot: Bot,
         lines.append(f"• <b>{escape(rank_name)}</b> — {escape(label)}")
     lines.append("")
     lines.append(f"Всего: <b>{len(members)}</b>")
-    await message.answer("\\n".join(lines))
+    await message.answer("\n".join(lines))
