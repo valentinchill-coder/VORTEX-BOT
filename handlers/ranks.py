@@ -213,3 +213,56 @@ async def setrank_command(message: Message, db: Database, bot: Bot,
         await message.answer(f"Ранг пользователя {escape(target.full_name)} снят.")
     else:
         await message.answer(f"Пользователю {escape(target.full_name)} назначен ранг «{RANKS[new_rank][0]}» ({new_rank}/7).")
+
+@router.message(Command("admins"))
+async def admins_command(message: Message, db: Database, bot: Bot,
+                         owner_ids: frozenset[int]):
+    if message.chat.type == "private":
+        await message.answer("Список администраторов доступен в группе.")
+        return
+
+    members: dict[int, tuple[int, str]] = {}
+    try:
+        telegram_admins = await bot.get_chat_administrators(message.chat.id)
+        for admin in telegram_admins:
+            user = admin.user
+            rank = 7 if user.id in owner_ids else 6
+            label = f"@{user.username}" if user.username else f"{user.full_name} (без username)"
+            members[user.id] = (rank, label)
+    except TelegramAPIError:
+        await message.answer("Не удалось получить список администраторов Telegram.")
+        return
+
+    for user_id, assigned_rank in await db.list_moderation_ranks(message.chat.id):
+        try:
+            member = await bot.get_chat_member(message.chat.id, user_id)
+            user = member.user
+            rank = 7 if user_id in owner_ids else assigned_rank
+            label = f"@{user.username}" if user.username else f"{user.full_name} (без username)"
+            previous = members.get(user_id)
+            if previous is None or rank > previous[0]:
+                members[user_id] = (rank, label)
+        except TelegramAPIError:
+            continue
+
+    for owner_id in owner_ids:
+        if owner_id not in members:
+            try:
+                member = await bot.get_chat_member(message.chat.id, owner_id)
+                user = member.user
+                label = f"@{user.username}" if user.username else f"{user.full_name} (без username)"
+                members[owner_id] = (7, label)
+            except TelegramAPIError:
+                continue
+
+    if not members:
+        await message.answer("В этой группе пока нет администраторов или участников с назначенными рангами.")
+        return
+
+    lines = ["🛡 <b>Администраторы и команда модерации</b>", ""]
+    for user_id, (rank, label) in sorted(members.items(), key=lambda item: (-item[1][0], item[1][1].casefold())):
+        rank_name = RANKS.get(rank, ("Участник", ""))[0]
+        lines.append(f"• <b>{escape(rank_name)}</b> — {escape(label)}")
+    lines.append("")
+    lines.append(f"Всего: <b>{len(members)}</b>")
+    await message.answer("\\n".join(lines))
