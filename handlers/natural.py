@@ -155,13 +155,14 @@ def parse_intent(text: str) -> str | None:
             r"(\d+)\s*(д(?:ень|ня|ней|н\.)?|ч(?:ас|аса|асов|\.)?|м(?:инут\w*|ин\.)?)",
             value,
         )
-        if not duration_parts:
-            return "/mute"
         normalized = []
         for amount, unit_word in duration_parts:
             unit = "d" if unit_word.startswith("д") else ("h" if unit_word.startswith("ч") else "m")
             normalized.append(f"{amount}{unit}")
-        return "/mute " + "".join(normalized)
+        username = re.search(r"@([a-z0-9_]{5,32})", raw, re.I)
+        target = f" @{username.group(1)}" if username else ""
+        duration = " " + "".join(normalized) if normalized else ""
+        return "/mute" + target + duration
     if re.search(r"\b(разбань|разбанить|сними бан|unban)\b", value):
         match = re.search(r"@([a-z0-9_]{5,32})", raw, re.I)
         return f"/unban @{match.group(1)}" if match else "__need_unban_username__"
