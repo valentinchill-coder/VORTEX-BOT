@@ -38,7 +38,7 @@ async def target_from_reply(message: Message):
         return None
     return target
 
-async def target_from_reply_or_username(message: Message, db: Database, bot: Bot):
+async def target_from_reply_or_username(message: Message, db: Database, bot: Bot, command_name: str = "unmute"):
     """Resolve a moderation target from a replied-to message or a known group username."""
     if message.reply_to_message and message.reply_to_message.from_user:
         target = message.reply_to_message.from_user
@@ -46,7 +46,7 @@ async def target_from_reply_or_username(message: Message, db: Database, bot: Bot
         parts = (message.text or "").split(maxsplit=1)
         username = parts[1].strip().split()[0] if len(parts) > 1 else ""
         if not re.fullmatch(r"@[a-zA-Z0-9_]{5,32}", username):
-            await message.answer("Ответь на сообщение участника или укажи @username: /unmute @username")
+            await message.answer(f"Ответь на сообщение участника или укажи @username: /{command_name} @username")
             return None
         target_id = await db.find_user_id_by_username(message.chat.id, username)
         if target_id is None:
@@ -216,13 +216,16 @@ def parse_duration(value: str) -> timedelta | None:
 async def mute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[int]):
     if not await rank_denial(message, db, bot, owner_ids, "mute"):
         return
-    target = await target_from_reply(message)
+    target = await target_from_reply_or_username(message, db, bot, "mute")
     if not target:
         return
     if not await bot_can_restrict(message, bot) or not await target_is_restrictable(message, bot, target):
         return
-    parts = (message.text or "").split(maxsplit=1)
-    duration_text = parts[1].strip() if len(parts) > 1 else ""
+    parts = (message.text or "").split()
+    if message.reply_to_message:
+        duration_text = " ".join(parts[1:]).strip()
+    else:
+        duration_text = " ".join(parts[2:]).strip() if len(parts) > 1 else ""
     duration = parse_duration(duration_text)
     if not duration:
         await message.answer(
