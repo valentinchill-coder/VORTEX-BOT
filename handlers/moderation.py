@@ -212,11 +212,11 @@ async def mute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
     if not await bot_can_restrict(message, bot) or not await target_is_restrictable(message, bot, target):
         return
     parts = (message.text or "").split(maxsplit=1)
-    duration_text = parts[1].strip() if len(parts) > 1 else "10m"
+    duration_text = parts[1].strip() if len(parts) > 1 else ""
     duration = parse_duration(duration_text)
     if not duration:
         await message.answer(
-            "Укажи срок после команды: /mute 30m, /mute 2h, /mute 1d или /mute 1h30m. "
+            "Модератор должен указать срок мута: /mute 30m, /mute 2h, /mute 1d или /mute 1h30m. "
             "Можно словами: /mute 30 минут, /mute 2 часа. Минимум — 1 минута, максимум — 366 дней."
         )
         return
