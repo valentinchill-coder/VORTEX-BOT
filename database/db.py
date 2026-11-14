@@ -437,6 +437,25 @@ class Database:
             row = await cursor.fetchone()
             return int(row[0]) if row else 0
 
+    async def add_balance(self, chat_id: int, user_id: int, amount: int) -> int:
+        """Atomically credit a wallet and return its new balance."""
+        if amount <= 0 or amount > 9_000_000_000_000_000_000:
+            raise ValueError("Coin amount is outside the supported range.")
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("BEGIN IMMEDIATE")
+            await db.execute("""
+                INSERT INTO wallets(chat_id,user_id,balance) VALUES(?,?,?)
+                ON CONFLICT(chat_id,user_id) DO UPDATE SET
+                    balance=wallets.balance+excluded.balance
+            """, (chat_id, user_id, amount))
+            cursor = await db.execute(
+                "SELECT balance FROM wallets WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            balance = int((await cursor.fetchone())[0])
+            await db.commit()
+            return balance
+
     async def claim_daily(self, chat_id: int, user_id: int, reward: int = 100) -> tuple[bool, int]:
         if reward <= 0:
             raise ValueError("Daily reward must be positive.")
