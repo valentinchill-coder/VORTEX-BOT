@@ -23,6 +23,65 @@ async def balance_command(message: Message, db: Database):
     await message.answer(f"💰 Баланс {escape(target.full_name)}: <b>{balance} V-coins</b>")
 
 
+@router.message(Command("givecoins"))
+async def give_coins_command(
+    message: Message, db: Database, owner_ids: frozenset[int]
+):
+    if not message.from_user or message.from_user.id not in owner_ids:
+        await message.answer("⛔ Эта команда доступна только владельцу VORTEX.")
+        return
+    if message.chat.type == ChatType.PRIVATE:
+        await message.answer("Используй команду в группе: /givecoins @username 50000")
+        return
+    parts = (message.text or "").split()
+    if len(parts) != 3:
+        await message.answer(
+            "Формат: /givecoins @username сумма\n"
+            "Например: /givecoins @player 50000"
+        )
+        return
+    username = parts[1].strip()
+    if not username.startswith("@") or not username[1:]:
+        await message.answer("Укажи получателя по username: /givecoins @username сумма")
+        return
+    try:
+        amount = int(parts[2])
+    except ValueError:
+        await message.answer("Сумма должна быть целым положительным числом.")
+        return
+    if amount < 1 or amount > 9_000_000_000_000_000_000:
+        await message.answer("Сумма должна быть от 1 до 9 000 000 000 000 000 000 V-coins.")
+        return
+    target_id = await db.find_user_id_by_username(message.chat.id, username)
+    if target_id is None:
+        await message.answer(
+            "Не нашёл этот username среди известных участников группы. "
+            "Попроси участника написать любое сообщение в группе и повтори команду."
+        )
+        return
+    if target_id == message.from_user.id:
+        await message.answer("Для начисления себе используй свой username, если он сохранён в базе; "
+                             "команда не запрещает владельцу начислять монеты себе.")
+    try:
+        member = await message.bot.get_chat_member(message.chat.id, target_id)
+    except Exception:
+        await message.answer("Не удалось подтвердить, что этот пользователь состоит в группе.")
+        return
+    if member.user.is_bot:
+        await message.answer("Нельзя начислять V-coins ботам.")
+        return
+    try:
+        balance = await db.add_balance(message.chat.id, target_id, amount)
+    except (ValueError, OverflowError):
+        await message.answer("Не удалось начислить такую сумму: она превышает допустимый предел.")
+        return
+    display_name = escape(member.user.full_name)
+    await message.answer(
+        f"✅ Владелец начислил {display_name} <b>+{amount} V-coins</b>.\n"
+        f"Новый баланс: <b>{balance} V-coins</b>."
+    )
+
+
 @router.message(Command("daily"))
 async def daily_command(message: Message, db: Database):
     if message.chat.type == ChatType.PRIVATE:
