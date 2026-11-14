@@ -40,6 +40,8 @@ def parse_intent(text: str) -> str | None:
     value = re.sub(r"\s+", " ", value).strip()
 
     # Moderation ranks: natural-language aliases.
+    if re.fullmatch(r"админы|список админов|покажи админов|администраторы", value):
+        return "/admins"
     if re.search(r"\b(мой ранг|какой у меня ранг|покажи мой ранг)\b", value):
         return "__myrank__"
     if re.search(r"\b(покажи ранги|список рангов|иерархия рангов|какие ранги есть|какие есть ранги|какие у нас ранги|перечисли ранги)\b", value):
@@ -207,6 +209,7 @@ async def _dispatch(message: Message, command_text: str, db: Database, bot, owne
         "/ban": lambda: moderation.ban(synthetic, bot, db, owner_ids),
         "/unban": lambda: moderation.unban(synthetic, bot, db, owner_ids),
         "/audit": lambda: moderation.audit_command(synthetic, bot, db, owner_ids),
+        "/admins": lambda: ranks.admins_command(synthetic, db, bot, owner_ids),
     }
     handler = handlers.get(command)
     if handler:
