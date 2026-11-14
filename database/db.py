@@ -111,12 +111,35 @@ class Database:
                 CREATE TABLE IF NOT EXISTS moderation_ranks (
                     chat_id INTEGER NOT NULL,
                     user_id INTEGER NOT NULL,
-                    rank INTEGER NOT NULL CHECK(rank BETWEEN 1 AND 5),
+                    rank INTEGER NOT NULL CHECK(rank BETWEEN 1 AND 7),
                     assigned_by INTEGER NOT NULL,
                     updated_at TEXT NOT NULL,
                     PRIMARY KEY (chat_id, user_id)
                 )
             """)
+            # Upgrade databases created by older bot versions (rank limit 1-5).
+            schema_cursor = await db.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='moderation_ranks'"
+            )
+            schema_row = await schema_cursor.fetchone()
+            if schema_row and "BETWEEN 1 AND 5" in (schema_row[0] or ""):
+                await db.execute("ALTER TABLE moderation_ranks RENAME TO moderation_ranks_old")
+                await db.execute("""
+                    CREATE TABLE moderation_ranks (
+                        chat_id INTEGER NOT NULL,
+                        user_id INTEGER NOT NULL,
+                        rank INTEGER NOT NULL CHECK(rank BETWEEN 1 AND 7),
+                        assigned_by INTEGER NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        PRIMARY KEY (chat_id, user_id)
+                    )
+                """)
+                await db.execute("""
+                    INSERT INTO moderation_ranks(chat_id,user_id,rank,assigned_by,updated_at)
+                    SELECT chat_id,user_id,rank,assigned_by,updated_at
+                    FROM moderation_ranks_old
+                """)
+                await db.execute("DROP TABLE moderation_ranks_old")
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS game_stats (
                     chat_id INTEGER NOT NULL,
@@ -659,8 +682,8 @@ class Database:
                 )
                 await db.commit()
             return
-        if not 1 <= rank <= 5:
-            raise ValueError("Moderation rank must be between 1 and 5.")
+        if not 1 <= rank <= 7:
+            raise ValueError("Moderation rank must be between 1 and 7.")
         async with aiosqlite.connect(self.path) as db:
             await db.execute("""
                 INSERT INTO moderation_ranks(chat_id,user_id,rank,assigned_by,updated_at)
