@@ -148,12 +148,18 @@ def parse_intent(text: str) -> str | None:
         username = re.search(r"@([a-z0-9_]{5,32})", raw, re.I)
         return f"/unmute @{username.group(1)}" if username else "/unmute"
     if re.search(r"\b(замути|замутить|замуть|мут|mute|ограничь писать)\b", value):
-        duration = re.search(r"(\d+)\s*(минут\w*|мин\b|час\w*|ч\b|дн\w*|д\b)", value)
-        if not duration:
+        # Extract one or more duration parts, e.g. "1 час 30 минут".
+        duration_parts = re.findall(
+            r"(\d+)\s*(д(?:ень|ня|ней|н\.)?|ч(?:ас|аса|асов|\.)?|м(?:инут\w*|ин\.)?)",
+            value,
+        )
+        if not duration_parts:
             return "/mute 10m"
-        unit_word = duration.group(2)
-        unit = "m" if unit_word.startswith("мин") else ("h" if unit_word.startswith(("час", "ч")) else "d")
-        return f"/mute {duration.group(1)}{unit}"
+        normalized = []
+        for amount, unit_word in duration_parts:
+            unit = "d" if unit_word.startswith("д") else ("h" if unit_word.startswith("ч") else "m")
+            normalized.append(f"{amount}{unit}")
+        return "/mute " + "".join(normalized)
     if re.search(r"\b(разбань|разбанить|сними бан|unban)\b", value):
         match = re.search(r"@([a-z0-9_]{5,32})", raw, re.I)
         return f"/unban @{match.group(1)}" if match else "__need_unban_username__"
