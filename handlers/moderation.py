@@ -369,11 +369,38 @@ async def audit_command(message: Message, bot: Bot, db: Database, owner_ids: fro
         await message.answer("📋 Журнал модерации пока пуст.")
         return
     lines = ["📋 <b>Последние действия модерации</b>", ""]
+    user_labels: dict[int, str] = {}
+
+    async def display_user(user_id: int) -> str:
+        if user_id not in user_labels:
+            try:
+                member = await bot.get_chat_member(message.chat.id, user_id)
+                user = member.user
+                user_labels[user_id] = (
+                    f"@{user.username}" if user.username else user.full_name
+                )
+            except TelegramAPIError:
+                user_labels[user_id] = "профиль недоступен"
+        return escape(user_labels[user_id])
+
+    action_labels = {
+        "warn": "WARN",
+        "clear_warnings": "СНЯТИЕ WARN",
+        "mute": "MUTE",
+        "unmute": "UNMUTE",
+        "kick": "KICK",
+        "ban": "BAN",
+        "unban": "UNBAN",
+    }
     for row in rows:
-        details = f" · {escape(row['details'])}" if row["details"] else ""
+        actor = await display_user(int(row["actor_id"]))
+        target = await display_user(int(row["target_id"]))
+        created = escape(row["created_at"][:16].replace("T", " "))
+        action = escape(action_labels.get(row["action"], row["action"].upper()))
+        details = f"\n   Причина/детали: {escape(row['details'])}" if row["details"] else ""
         lines.append(
-            f"<code>{escape(row['created_at'][:16])}</code> "
-            f"<b>{escape(row['action'])}</b> · "
-            f"{row['actor_id']} → {row['target_id']}{details}"
+            f"<code>{created}</code> · <b>{action}</b>\n"
+            f"   Модератор: {actor}\n"
+            f"   Участник: {target}{details}"
         )
-    await message.answer("\n".join(lines))
+    await message.answer("\n\n".join(lines))
