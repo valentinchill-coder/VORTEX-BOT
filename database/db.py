@@ -671,6 +671,14 @@ class Database:
             row = await cursor.fetchone()
             return int(row[0]) if row else 0
 
+    async def list_moderation_ranks(self, chat_id: int) -> list[tuple[int, int]]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                "SELECT user_id, rank FROM moderation_ranks WHERE chat_id=? AND rank > 0 ORDER BY rank DESC, user_id",
+                (chat_id,),
+            )
+            return [(int(user_id), int(rank)) for user_id, rank in await cursor.fetchall()]
+
     async def set_moderation_rank(
         self, chat_id: int, user_id: int, rank: int, assigned_by: int
     ) -> None:
