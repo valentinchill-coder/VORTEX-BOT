@@ -180,15 +180,24 @@ async def clearwarns(message: Message, bot: Bot, db: Database, owner_ids: frozen
 
 
 def parse_duration(value: str) -> timedelta | None:
-    match = re.fullmatch(r"(\d+)([mhd])", value.lower())
-    if not match:
-        return None
-    amount = int(match.group(1))
-    unit = match.group(2)
-    if amount < 1:
-        return None
-    seconds = amount * {"m": 60, "h": 3600, "d": 86400}[unit]
-    if seconds > 366 * 86400:
+    """Parse moderator-selected mute duration: 30m, 2h, 1d, or 1h30m."""
+    value = (value or "").strip().lower().replace("ё", "е")
+    compact = re.fullmatch(r"(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?", value)
+    if compact and any(compact.groups()):
+        days, hours, minutes = (int(part or 0) for part in compact.groups())
+    else:
+        # Also accept readable Russian forms: "1 день 2 часа 30 минут".
+        readable = re.fullmatch(
+            r"(?:(\d+)\s*(?:д(?:ень|ня|ней|н\.)?))?\s*"
+            r"(?:(\d+)\s*(?:ч(?:ас|аса|асов|\.)?))?\s*"
+            r"(?:(\d+)\s*(?:м(?:инут(?:а|ы)?|ин\.)?))?",
+            value,
+        )
+        if not readable or not any(readable.groups()):
+            return None
+        days, hours, minutes = (int(part or 0) for part in readable.groups())
+    seconds = days * 86400 + hours * 3600 + minutes * 60
+    if seconds < 60 or seconds > 366 * 86400:
         return None
     return timedelta(seconds=seconds)
 
@@ -203,9 +212,13 @@ async def mute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
     if not await bot_can_restrict(message, bot) or not await target_is_restrictable(message, bot, target):
         return
     parts = (message.text or "").split(maxsplit=1)
-    duration = parse_duration(parts[1].strip()) if len(parts) > 1 else timedelta(minutes=10)
+    duration_text = parts[1].strip() if len(parts) > 1 else "10m"
+    duration = parse_duration(duration_text)
     if not duration:
-        await message.answer("Формат времени: 10m, 2h или 1d. Максимум — 366d.")
+        await message.answer(
+            "Укажи срок после команды: /mute 30m, /mute 2h, /mute 1d или /mute 1h30m. "
+            "Можно словами: /mute 30 минут, /mute 2 часа. Минимум — 1 минута, максимум — 366 дней."
+        )
         return
     until = datetime.now(timezone.utc) + duration
     try:
@@ -227,8 +240,8 @@ async def mute(message: Message, bot: Bot, db: Database, owner_ids: frozenset[in
             ),
             until_date=until,
         )
-        await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "mute", parts[1] if len(parts) > 1 else "10m")
-        await message.answer(f"🔇 {escape(target.full_name)} ограничен на {escape(parts[1]) if len(parts) > 1 else '10m'}.")
+        await db.log_moderation_action(message.chat.id, message.from_user.id, target.id, "mute", duration_text)
+        await message.answer(f"🔇 {escape(target.full_name)} ограничен на {escape(duration_text)}.")
     except TelegramAPIError as exc:
         await message.answer(f"Не удалось ограничить пользователя: {exc.message}")
 
