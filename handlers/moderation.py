@@ -156,9 +156,19 @@ async def warnings(message: Message, bot: Bot, db: Database, owner_ids: frozense
                     status = "истекло"
                 else:
                     status = "активно"
+                try:
+                    moderator = await bot.get_chat_member(message.chat.id, row["admin_id"])
+                    moderator_user = moderator.user
+                    moderator_label = (
+                        f"@{moderator_user.username}"
+                        if moderator_user.username
+                        else moderator_user.full_name
+                    )
+                except TelegramAPIError:
+                    moderator_label = "профиль недоступен"
                 lines.append(
                     f"• <code>{created}</code> — {reason} "
-                    f"[{status}] (модератор ID: <code>{row['admin_id']}</code>)"
+                    f"[{status}] (модератор: {escape(moderator_label)})"
                 )
         else:
             lines.append("Нарушений не зафиксировано.")
