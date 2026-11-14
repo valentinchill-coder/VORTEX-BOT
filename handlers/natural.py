@@ -154,7 +154,7 @@ def parse_intent(text: str) -> str | None:
             value,
         )
         if not duration_parts:
-            return "/mute 10m"
+            return "/mute"
         normalized = []
         for amount, unit_word in duration_parts:
             unit = "d" if unit_word.startswith("д") else ("h" if unit_word.startswith("ч") else "m")
