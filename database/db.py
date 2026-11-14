@@ -443,16 +443,21 @@ class Database:
             raise ValueError("Coin amount is outside the supported range.")
         async with aiosqlite.connect(self.path) as db:
             await db.execute("BEGIN IMMEDIATE")
+            cursor = await db.execute(
+                "SELECT balance FROM wallets WHERE chat_id=? AND user_id=?",
+                (chat_id, user_id),
+            )
+            row = await cursor.fetchone()
+            current_balance = int(row[0]) if row else 0
+            if current_balance > 9_223_372_036_854_775_807 - amount:
+                await db.rollback()
+                raise ValueError("Resulting wallet balance exceeds SQLite integer range.")
             await db.execute("""
                 INSERT INTO wallets(chat_id,user_id,balance) VALUES(?,?,?)
                 ON CONFLICT(chat_id,user_id) DO UPDATE SET
                     balance=wallets.balance+excluded.balance
             """, (chat_id, user_id, amount))
-            cursor = await db.execute(
-                "SELECT balance FROM wallets WHERE chat_id=? AND user_id=?",
-                (chat_id, user_id),
-            )
-            balance = int((await cursor.fetchone())[0])
+            balance = current_balance + amount
             await db.commit()
             return balance
 
