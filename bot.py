@@ -213,6 +213,7 @@ async def main():
             BotCommand(command="balance", description="Баланс участника (ответом)"),
             BotCommand(command="daily", description="Получить ежедневную награду"),
             BotCommand(command="pay", description="Перевести V-coins (ответом)"),
+            BotCommand(command="givecoins", description="Начислить V-coins (только владелец)"),
             BotCommand(command="exchange", description="Обменять игровые очки на V-coins"),
             BotCommand(command="shop", description="Открыть магазин предметов"),
             BotCommand(command="inventory", description="Мой инвентарь"),
